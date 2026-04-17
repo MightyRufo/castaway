@@ -42,23 +42,52 @@
 
   const stateBox = { config: null };
 
+  /* --- CSRF token (fetched once, refreshed if a request 403s) --- */
+  let csrf = '';
+  async function refreshCsrf() {
+    try {
+      const r = await fetch('/api/auth/csrf', { credentials: 'same-origin' });
+      if (r.ok) csrf = (await r.json()).csrf || '';
+    } catch (_) {}
+  }
+
   /* --- API --- */
   async function getState() {
     const r = await fetch('/api/state');
     if (r.status === 401) { location.href = '/login'; return null; }
     return await r.json();
   }
-  async function postConfig(patch) {
-    const r = await fetch('/api/config', {
+  async function postWithCsrf(url, body) {
+    const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      credentials: 'same-origin',
+      body: body ? JSON.stringify(body) : undefined,
     });
+    if (r.status === 403) {
+      // Stale CSRF (e.g. session token rotated). Refresh and retry once.
+      await refreshCsrf();
+      return await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        credentials: 'same-origin',
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    }
+    return r;
+  }
+  async function postConfig(patch) {
+    const r = await postWithCsrf('/api/config', patch);
     return await r.json();
   }
   async function regenKey() {
-    const r = await fetch('/api/key/regenerate', { method: 'POST' });
+    const r = await postWithCsrf('/api/key/regenerate');
     return await r.json();
+  }
+  async function logout() {
+    const r = await postWithCsrf('/api/auth/logout');
+    if (r.redirected) location.href = r.url;
+    else location.href = '/login';
   }
 
   /* --- Render --- */
@@ -182,15 +211,13 @@
   $('copy-key-btn').addEventListener('click', () => copyText($('cfg-key').value, 'Stream key'));
   $('copy-watch-btn').addEventListener('click', () => copyText($('watch-url').textContent.trim(), 'Watch URL'));
 
-  $('logout-btn').addEventListener('click', () => {
-    location.href = '/api/auth/logout';
-  });
+  $('logout-btn').addEventListener('click', logout);
 
   /* --- Refresh loop --- */
   async function loop() {
     const s = await getState();
     render(s);
   }
-  loop();
+  refreshCsrf().then(loop);
   setInterval(loop, 3000);
 })();

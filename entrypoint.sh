@@ -19,9 +19,13 @@ cfg = {
     "viewer_password": os.environ.get("VIEWER_PASSWORD") or "",
 }
 open("$CONFIG_FILE", "w").write(json.dumps(cfg, indent=2))
+os.chmod("$CONFIG_FILE", 0o600)
 EOF
   echo "castaway: seeded $CONFIG_FILE"
 fi
+# Tighten perms even if the file already existed from a prior version.
+chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+chmod 700 "$(dirname "$CONFIG_FILE")" 2>/dev/null || true
 
 /usr/local/bin/regen.sh
 

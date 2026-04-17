@@ -17,36 +17,34 @@ TITLE=$(python3 -c "import json,sys; print(json.load(open('$CONFIG_FILE')).get('
 VIEWER_PW=$(python3 -c "import json,sys; print(json.load(open('$CONFIG_FILE')).get('viewer_password',''))")
 
 # ---------------------------------------------------------------------------
-# Stream-key auth (rtmp on_publish)
+# Stream-key auth — handled by the Flask admin via on_publish callback.
+# nginx-rtmp POSTs the stream name to /auth/publish on Flask (loopback),
+# which compares with secrets.compare_digest. The key never appears in any
+# URL on the HTTP plane (notify_method post in nginx.conf puts it in the
+# request body).
 # ---------------------------------------------------------------------------
 if [ -n "$KEY" ]; then
-  cat > "$CONF_DIR/rtmp-auth.conf" <<EOF
-on_publish http://127.0.0.1:8080/auth/publish;
-EOF
-  cat > "$CONF_DIR/keys.conf" <<EOF
-default_type text/plain;
-if (\$arg_name = "$KEY") { return 200 "ok"; }
-return 403 "stream key not authorized\n";
+  cat > "$CONF_DIR/rtmp-auth.conf" <<'EOF'
+on_publish http://127.0.0.1:7401/auth/publish;
 EOF
 else
   : > "$CONF_DIR/rtmp-auth.conf"
-  echo 'return 200 "no auth\n";' > "$CONF_DIR/keys.conf"
 fi
 
 # ---------------------------------------------------------------------------
-# Stream title (served via /api/config to the player)
+# Stream title (served via /api/config to the player). Flask /api/config
+# already strips control chars + quotes + backslashes from the saved title,
+# but defence in depth: do it again here in case the file was hand-edited.
 # ---------------------------------------------------------------------------
-TITLE_ESC=$(printf '%s' "$TITLE" | sed 's/"/\\"/g')
+TITLE_SAFE=$(printf '%s' "$TITLE" | tr -d '\000-\037\047\042\134')
 cat > "$CONF_DIR/http-config.conf" <<EOF
 default_type application/json;
 add_header Cache-Control no-cache;
-return 200 '{"title":"$TITLE_ESC"}';
+return 200 '{"title":"$TITLE_SAFE"}';
 EOF
 
 # ---------------------------------------------------------------------------
-# Stream relay — single-bitrate passthrough. OBS publishes whatever
-# resolution/bitrate it likes; we pass the bytes through to /show/stream
-# so HLS is generated from the source unchanged.
+# Stream relay — single-bitrate passthrough.
 # ---------------------------------------------------------------------------
 cat > "$CONF_DIR/live-relay.conf" <<'EOF'
 push rtmp://127.0.0.1:1935/show/stream;
@@ -62,30 +60,35 @@ hls_nested off;
 EOF
 
 # ---------------------------------------------------------------------------
-# Viewer password — in-page login + cookie gate
+# Viewer password — in-page login + cookie gate.
+# Login is POST and routed to Flask (no password in URL/access log). The
+# per-boot AUTH_TOKEN is shared with Flask via /var/lib/castaway/auth_token.
 # ---------------------------------------------------------------------------
 if [ -n "$VIEWER_PW" ]; then
   AUTH_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+  printf '%s' "$AUTH_TOKEN" > /var/lib/castaway/auth_token
+  chmod 600 /var/lib/castaway/auth_token 2>/dev/null || true
+
   cat > "$CONF_DIR/http-auth-map.conf" <<EOF
 map \$cookie_castaway_auth \$authed {
     default 0;
     "$AUTH_TOKEN" 1;
 }
 EOF
-  cat > "$CONF_DIR/http-login-route.conf" <<EOF
+  cat > "$CONF_DIR/http-login-route.conf" <<'EOF'
 location = /login.html { root /var/www/html; }
 location = /icon.svg   { root /var/www/html; }
 
+# POST to Flask: viewer password validated server-side, password never in URL.
 location = /auth/login {
-    if (\$arg_password = "$VIEWER_PW") {
-        add_header Set-Cookie "castaway_auth=$AUTH_TOKEN; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000" always;
-        return 302 /;
-    }
-    return 302 /login.html?bad=1;
+    proxy_pass http://127.0.0.1:7401/viewer/auth/login;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    access_log off;
 }
 
 location = /auth/logout {
-    add_header Set-Cookie "castaway_auth=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" always;
+    add_header Set-Cookie "castaway_auth=deleted; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" always;
     return 302 /login.html;
 }
 EOF
@@ -93,6 +96,7 @@ EOF
 if ($authed = 0) { return 302 /login.html; }
 EOF
 else
+  : > /var/lib/castaway/auth_token 2>/dev/null || true
   cat > "$CONF_DIR/http-auth-map.conf" <<'EOF'
 map $cookie_castaway_auth $authed { default 1; }
 EOF

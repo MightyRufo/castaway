@@ -2,6 +2,9 @@
 
 Reads/writes /var/lib/castaway/config.json and triggers an nginx reload
 when settings change so OBS sessions survive config edits.
+
+Listens on 127.0.0.1 only — nginx proxies it on the viewer port (8080)
+under /admin/ so external clients can't bypass viewer auth on heartbeat.
 """
 from __future__ import annotations
 
@@ -27,10 +30,16 @@ REGEN_SCRIPT = os.environ.get("CASTAWAY_REGEN", "/usr/local/bin/regen.sh")
 NGINX_STAT_URL = os.environ.get("CASTAWAY_STAT_URL", "http://127.0.0.1:8080/stat")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ADMIN_PORT = int(os.environ.get("ADMIN_PORT", "7401"))
+# Bind to all interfaces so external admin access works. The sensitive
+# routes (/api/heartbeat, /api/streamstate, /auth/publish) are gated by
+# `_trusted_loopback()` in `_gate()` — they require the request to come
+# from 127.0.0.1 (i.e. via the nginx viewer-port proxy or nginx-rtmp).
+ADMIN_BIND = os.environ.get("ADMIN_BIND", "0.0.0.0")
 
-# Per-boot random session token. Stored as the admin cookie value so the
-# password itself never lives in cookie storage.
-SESSION_TOKEN = secrets.token_urlsafe(24)
+# Length caps on config inputs (prevent oversized writes / regen DoS).
+MAX_TITLE_LEN = 200
+MAX_PASSWORD_LEN = 200
+MAX_KEY_LEN = 64
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "stream_key": "",
@@ -41,16 +50,36 @@ DEFAULT_CONFIG: dict[str, Any] = {
 _config_lock = threading.Lock()
 
 # Active player heartbeats: {session_id: {ip, ua, started, last_seen}}.
-# Sessions older than CLIENT_TTL with no heartbeat are evicted.
 CLIENT_TTL = 15  # seconds
 _clients: dict[str, dict[str, Any]] = {}
 _clients_lock = threading.Lock()
+
+# Per-login session tokens. Each successful login mints a fresh token;
+# logout removes it. Set ⇒ logout invalidates only this session, not others.
+_sessions: set[str] = set()
+_sessions_lock = threading.Lock()
+
+# Per-session CSRF tokens. Keyed by session token, value is csrf token.
+_csrf_by_session: dict[str, str] = {}
+
+# Login throttling: per-IP count of failed attempts + last-fail timestamp.
+_login_failures: dict[str, dict[str, float]] = {}
+_login_lock = threading.Lock()
+LOGIN_BACKOFF_BASE = 2.0       # 2^n second backoff
+LOGIN_BACKOFF_RESET = 600       # seconds — reset counter after no failures
 
 
 def gen_key(length: int = 16) -> str:
     """URL-safe-ish stream key. Lowercase + digits, easy to type into OBS."""
     alphabet = string.ascii_lowercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _safe_chmod(p: Path, mode: int) -> None:
+    try:
+        p.chmod(mode)
+    except Exception:
+        pass
 
 
 def load_config() -> dict[str, Any]:
@@ -60,12 +89,12 @@ def load_config() -> dict[str, Any]:
             cfg = dict(DEFAULT_CONFIG)
             cfg["stream_key"] = gen_key()
             CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+            _safe_chmod(CONFIG_PATH, 0o600)
             return cfg
         try:
             cfg = json.loads(CONFIG_PATH.read_text())
         except Exception:
             cfg = dict(DEFAULT_CONFIG)
-        # Backfill any missing keys (forward-compat for new fields).
         for k, v in DEFAULT_CONFIG.items():
             cfg.setdefault(k, v)
         return cfg
@@ -75,10 +104,10 @@ def save_config(cfg: dict[str, Any]) -> None:
     with _config_lock:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+        _safe_chmod(CONFIG_PATH, 0o600)
 
 
 def regen_and_reload() -> tuple[bool, str]:
-    """Regenerate nginx conf.d snippets and tell nginx to reload."""
     try:
         r = subprocess.run([REGEN_SCRIPT], capture_output=True, text=True, timeout=10)
         if r.returncode != 0:
@@ -108,12 +137,8 @@ def _stat_text(node: ET.Element | None, path: str, default: str = "") -> str:
 
 def gather_stats() -> dict[str, Any]:
     root = _fetch_stat_xml()
-
     server_uptime = int(_stat_text(root, "uptime", "0") or "0") // 1000
 
-    # The push relay makes the source stream show up under the `show`
-    # application, not `live`. /show/stream is the source of truth for
-    # whether something is being published.
     publishing = False
     source_bw_in = 0
     source_bytes_in = 0
@@ -138,7 +163,6 @@ def gather_stats() -> dict[str, Any]:
                     publishing = True
                 source_bw_in = bw_in
                 source_bytes_in = bytes_in
-                # Subtract 1 for the publisher itself.
                 viewers = max(0, nclients - 1)
 
     cpu = psutil.cpu_percent(interval=None)
@@ -168,36 +192,96 @@ def gather_stats() -> dict[str, Any]:
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
 
+def _trusted_loopback() -> bool:
+    """True iff the request originated from 127.0.0.1 directly (not via XFF)."""
+    return (request.remote_addr or "") == "127.0.0.1"
+
+
 def _is_authed() -> bool:
     if not ADMIN_PASSWORD:
-        # Open mode (Mark warned: only for trial). Treat as authed.
         return True
-    return request.cookies.get("castaway_admin") == SESSION_TOKEN
+    cookie = request.cookies.get("castaway_admin", "")
+    if not cookie:
+        return False
+    with _sessions_lock:
+        return cookie in _sessions
+
+
+def _current_session() -> str:
+    return request.cookies.get("castaway_admin", "")
+
+
+def _csrf_for_session(session: str) -> str:
+    if not session:
+        return ""
+    if session not in _csrf_by_session:
+        _csrf_by_session[session] = secrets.token_urlsafe(24)
+    return _csrf_by_session[session]
+
+
+def _check_csrf() -> bool:
+    """Verify Origin matches host AND CSRF token matches session."""
+    # Origin/Referer same-host check.
+    origin = request.headers.get("Origin", "") or request.headers.get("Referer", "")
+    host = request.host_url.rstrip("/")
+    if origin and not origin.startswith(host):
+        return False
+    # CSRF token check.
+    session = _current_session()
+    if not session:
+        return False
+    expected = _csrf_by_session.get(session, "")
+    given = request.headers.get("X-CSRF-Token", "") or (request.get_json(silent=True) or {}).get("csrf", "")
+    return bool(expected) and secrets.compare_digest(expected, given)
+
+
+def _login_throttle(ip: str) -> float:
+    """Return seconds-to-wait before this IP can attempt login again, 0 if OK."""
+    with _login_lock:
+        rec = _login_failures.get(ip)
+        if not rec:
+            return 0.0
+        if time.time() - rec["last"] > LOGIN_BACKOFF_RESET:
+            _login_failures.pop(ip, None)
+            return 0.0
+        wait = LOGIN_BACKOFF_BASE ** rec["count"]
+        elapsed = time.time() - rec["last"]
+        return max(0.0, wait - elapsed)
+
+
+def _login_record_failure(ip: str) -> None:
+    with _login_lock:
+        rec = _login_failures.setdefault(ip, {"count": 0, "last": 0})
+        rec["count"] = min(rec["count"] + 1, 12)  # cap so 2^count doesn't explode
+        rec["last"] = time.time()
+
+
+def _login_record_success(ip: str) -> None:
+    with _login_lock:
+        _login_failures.pop(ip, None)
 
 
 @app.after_request
-def _no_cache(resp: Any) -> Any:
-    """Stop browsers caching admin JS/CSS/HTML — release cadence is high
-    and stale assets break the dashboard."""
+def _security_headers(resp: Any) -> Any:
     if request.path.startswith("/static/") or request.path == "/" or request.path == "/login":
         resp.headers["Cache-Control"] = "no-cache, must-revalidate"
         resp.headers["Pragma"] = "no-cache"
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
     return resp
 
 
 @app.before_request
 def _gate() -> Any:
-    """Redirect to login for HTML, return 401 for API.
+    """Auth gate. Loopback-only paths reject non-loopback requests."""
+    # Loopback-only — these are nginx-rtmp callbacks + viewer-port-proxied APIs.
+    loopback_only = ("/auth/publish", "/api/heartbeat", "/api/streamstate", "/viewer/auth/login")
+    if any(request.path == p for p in loopback_only):
+        if not _trusted_loopback():
+            abort(403)
+        return None
 
-    /api/heartbeat and /api/streamstate are reached via the nginx-proxied
-    viewer port, where the viewer-auth check has already been applied.
-    The admin auth check would block them, so they're explicitly open here.
-    """
-    open_paths = {
-        "/login", "/login.html", "/static",
-        "/api/auth/login", "/health",
-        "/api/heartbeat", "/api/streamstate",
-    }
+    open_paths = {"/login", "/login.html", "/static", "/api/auth/login", "/health"}
     if any(request.path == p or request.path.startswith(p + "/") for p in open_paths):
         return None
     if _is_authed():
@@ -212,45 +296,161 @@ def health() -> Any:
     return "ok", 200
 
 
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 @app.route("/login")
 def login_page() -> Any:
     bad = request.args.get("bad") is not None
-    return render_template("login.html", bad=bad)
+    locked_for = float(request.args.get("locked", "0") or 0)
+    return render_template("login.html", bad=bad, locked_for=locked_for)
 
 
 @app.route("/api/auth/login", methods=["POST"])
 def api_login() -> Any:
     if not ADMIN_PASSWORD:
         return jsonify({"ok": True, "open": True})
-    pw = (request.form.get("password") or request.json.get("password") if request.is_json
-          else request.form.get("password")) or ""
+    ip = request.remote_addr or "?"
+    wait = _login_throttle(ip)
+    if wait > 0:
+        if request.is_json:
+            return jsonify({"error": "rate limited", "retry_after": round(wait, 1)}), 429
+        return redirect(f"/login?locked={int(wait)+1}")
+    pw = (request.form.get("password") or "").strip()
+    if not pw and request.is_json:
+        pw = ((request.get_json(silent=True) or {}).get("password") or "").strip()
     if not secrets.compare_digest(pw, ADMIN_PASSWORD):
-        return redirect("/login?bad=1") if not request.is_json else (jsonify({"error": "bad password"}), 401)
+        _login_record_failure(ip)
+        if request.is_json:
+            return jsonify({"error": "bad password"}), 401
+        return redirect("/login?bad=1")
+    _login_record_success(ip)
+    # Mint a fresh per-login session token.
+    session = secrets.token_urlsafe(24)
+    with _sessions_lock:
+        _sessions.add(session)
+    _csrf_by_session[session] = secrets.token_urlsafe(24)
     resp = redirect("/") if not request.is_json else jsonify({"ok": True})
     resp.set_cookie(
-        "castaway_admin", SESSION_TOKEN,
-        httponly=True, samesite="Lax", max_age=30 * 24 * 3600, path="/",
+        "castaway_admin", session,
+        httponly=True, samesite="Strict", max_age=30 * 24 * 3600, path="/",
     )
     return resp
 
 
-@app.route("/api/auth/logout", methods=["POST", "GET"])
+@app.route("/api/auth/logout", methods=["POST"])
 def api_logout() -> Any:
+    if not _check_csrf():
+        return jsonify({"error": "csrf failed"}), 403
+    session = _current_session()
+    with _sessions_lock:
+        _sessions.discard(session)
+    _csrf_by_session.pop(session, None)
     resp = redirect("/login")
     resp.set_cookie("castaway_admin", "", expires=0, path="/")
     return resp
 
 
+@app.route("/api/auth/csrf")
+def api_csrf() -> Any:
+    """Admin JS fetches this on dashboard load to populate X-CSRF-Token header."""
+    return jsonify({"csrf": _csrf_for_session(_current_session())})
+
+
+# ---------------------------------------------------------------------------
+# Stream-key validation for nginx-rtmp on_publish callback (loopback only).
+# Switched from nginx string-match to Flask + secrets.compare_digest so the
+# key never appears in any URL on the HTTP plane.
+# ---------------------------------------------------------------------------
+@app.route("/auth/publish", methods=["POST"])
+def auth_publish() -> Any:
+    name = (request.form.get("name") or "").strip()
+    cfg = load_config()
+    expected = (cfg.get("stream_key") or "").strip()
+    if not expected:
+        return ("ok", 200)
+    if secrets.compare_digest(name, expected):
+        return ("ok", 200)
+    return ("forbidden", 403)
+
+
+# ---------------------------------------------------------------------------
+# Viewer login (loopback only — nginx proxies /auth/login here as POST).
+# Reads the per-boot AUTH_TOKEN that regen.sh wrote to a shared file and
+# sets it as the castaway_auth cookie. nginx's auth-map gates /hls/ on
+# cookie value matching that same token.
+# ---------------------------------------------------------------------------
+AUTH_TOKEN_FILE = Path("/var/lib/castaway/auth_token")
+_viewer_login_failures: dict[str, dict[str, float]] = {}
+_viewer_login_lock = threading.Lock()
+
+
+def _viewer_login_throttle(ip: str) -> float:
+    with _viewer_login_lock:
+        rec = _viewer_login_failures.get(ip)
+        if not rec:
+            return 0.0
+        if time.time() - rec["last"] > LOGIN_BACKOFF_RESET:
+            _viewer_login_failures.pop(ip, None)
+            return 0.0
+        wait = LOGIN_BACKOFF_BASE ** rec["count"]
+        return max(0.0, wait - (time.time() - rec["last"]))
+
+
+def _viewer_login_record_failure(ip: str) -> None:
+    with _viewer_login_lock:
+        rec = _viewer_login_failures.setdefault(ip, {"count": 0, "last": 0})
+        rec["count"] = min(rec["count"] + 1, 12)
+        rec["last"] = time.time()
+
+
+def _viewer_login_record_success(ip: str) -> None:
+    with _viewer_login_lock:
+        _viewer_login_failures.pop(ip, None)
+
+
+@app.route("/viewer/auth/login", methods=["POST"])
+def viewer_login() -> Any:
+    # Real client IP from X-Real-IP that nginx sets when proxying.
+    ip = request.headers.get("X-Real-IP", request.remote_addr or "?")
+    wait = _viewer_login_throttle(ip)
+    if wait > 0:
+        return redirect(f"/login.html?locked={int(wait)+1}")
+    pw = (request.form.get("password") or "")[:MAX_PASSWORD_LEN]
+    cfg = load_config()
+    expected = cfg.get("viewer_password", "")
+    if not expected:
+        # Viewer password not set — allow through. nginx auth-check is also
+        # disabled in this mode.
+        return redirect("/")
+    if not secrets.compare_digest(pw, expected):
+        _viewer_login_record_failure(ip)
+        return redirect("/login.html?bad=1")
+    _viewer_login_record_success(ip)
+    token = ""
+    try:
+        token = AUTH_TOKEN_FILE.read_text().strip()
+    except Exception:
+        pass
+    if not token:
+        return redirect("/login.html?bad=1")
+    resp = redirect("/")
+    resp.set_cookie(
+        "castaway_auth", token,
+        httponly=True, samesite="Strict", max_age=30 * 24 * 3600, path="/",
+    )
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Dashboard (admin-only)
+# ---------------------------------------------------------------------------
 @app.route("/")
 def dashboard() -> Any:
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", csrf=_csrf_for_session(_current_session()))
 
 
 def _evict_stale_clients() -> list[dict[str, Any]]:
-    """Drop clients that haven't sent a heartbeat in CLIENT_TTL seconds.
-
-    Returns the still-active list as plain dicts safe for JSON.
-    """
     now = time.time()
     out: list[dict[str, Any]] = []
     with _clients_lock:
@@ -273,7 +473,7 @@ def _evict_stale_clients() -> list[dict[str, Any]]:
 def api_state() -> Any:
     cfg = load_config()
     safe_cfg = {
-        "stream_key": cfg["stream_key"],  # admin can see it
+        "stream_key": cfg["stream_key"],
         "stream_title": cfg["stream_title"],
         "viewer_password_set": bool(cfg.get("viewer_password")),
     }
@@ -284,13 +484,10 @@ def api_state() -> Any:
     })
 
 
-# -- Open endpoints reached via the nginx proxy on the viewer port ----------
+# -- Loopback-only endpoints reached via nginx proxy on viewer port ---------
 
 @app.route("/api/streamstate")
 def api_streamstate() -> Any:
-    """Public-ish: just `{publishing: bool, title: str}`. Used by the
-    player to drive its state machine without spamming HLS requests when
-    nothing is live."""
     cfg = load_config()
     s = gather_stats()
     return jsonify({
@@ -301,45 +498,47 @@ def api_streamstate() -> Any:
 
 @app.route("/api/heartbeat", methods=["POST"])
 def api_heartbeat() -> Any:
-    """Player POSTs every 5s with X-Castaway-Session header. Used to count
-    active viewers in the admin dashboard."""
     sid = request.headers.get("X-Castaway-Session", "").strip()
     if not sid or len(sid) > 64:
         return ("", 204)
     now = time.time()
-    # Trust X-Forwarded-For if set (nginx adds it); else remote_addr.
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    # Trust X-Forwarded-For only when nginx (loopback) is the immediate caller.
+    xff = request.headers.get("X-Forwarded-For", "")
+    ip = (xff.split(",")[0].strip() if xff and _trusted_loopback() else request.remote_addr) or ""
     ua = request.headers.get("User-Agent", "")[:160]
     with _clients_lock:
         if sid in _clients:
             _clients[sid]["last_seen"] = now
             _clients[sid]["ip"] = ip
         else:
-            _clients[sid] = {
-                "ip": ip,
-                "ua": ua,
-                "started": now,
-                "last_seen": now,
-            }
+            _clients[sid] = {"ip": ip, "ua": ua, "started": now, "last_seen": now}
     return ("", 204)
 
 
 @app.route("/api/config", methods=["POST"])
 def api_config_set() -> Any:
+    if not _check_csrf():
+        return jsonify({"error": "csrf failed"}), 403
     body = request.get_json(silent=True) or {}
     cfg = load_config()
     changed = []
-    for field in ("stream_title",):
-        if field in body and isinstance(body[field], str):
-            if body[field] != cfg[field]:
-                cfg[field] = body[field]
-                changed.append(field)
+
+    if "stream_title" in body and isinstance(body["stream_title"], str):
+        new_title = body["stream_title"][:MAX_TITLE_LEN]
+        # Strip control chars + characters that break nginx config interpolation.
+        new_title = "".join(c for c in new_title if c >= " " and c not in "'\"\\")
+        if new_title != cfg["stream_title"]:
+            cfg["stream_title"] = new_title
+            changed.append("stream_title")
+
     if "viewer_password" in body:
-        # "" clears the password.
-        new_pw = body["viewer_password"] or ""
+        new_pw = (body["viewer_password"] or "")[:MAX_PASSWORD_LEN]
+        # Strip control chars to avoid breaking nginx config interpolation.
+        new_pw = "".join(c for c in new_pw if c >= " ")
         if new_pw != cfg.get("viewer_password", ""):
             cfg["viewer_password"] = new_pw
             changed.append("viewer_password")
+
     save_config(cfg)
     if changed:
         ok, msg = regen_and_reload()
@@ -350,6 +549,8 @@ def api_config_set() -> Any:
 
 @app.route("/api/key/regenerate", methods=["POST"])
 def api_regenerate_key() -> Any:
+    if not _check_csrf():
+        return jsonify({"error": "csrf failed"}), 403
     cfg = load_config()
     cfg["stream_key"] = gen_key()
     save_config(cfg)
@@ -360,10 +561,8 @@ def api_regenerate_key() -> Any:
 
 
 def main() -> None:
-    # Ensure config exists (also seeds initial random key).
     load_config()
-    # Use the simple Flask dev server — fine for a single-user admin UI.
-    app.run(host="0.0.0.0", port=ADMIN_PORT, threaded=True, debug=False)
+    app.run(host=ADMIN_BIND, port=ADMIN_PORT, threaded=True, debug=False)
 
 
 if __name__ == "__main__":

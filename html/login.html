@@ -93,17 +93,22 @@
   <p class="sub">Enter the password to watch.</p>
 
   <div id="err" class="error">Wrong password.</div>
+  <div id="locked" class="error">Too many attempts. Try again shortly.</div>
 
-  <form id="login-form" method="GET" action="/auth/login" autocomplete="off">
-    <input type="password" id="password" name="password" placeholder="Password" autofocus required>
+  <form id="login-form" method="POST" action="/auth/login" autocomplete="off">
+    <input type="password" id="password" name="password" placeholder="Password" autofocus required maxlength="200">
     <button type="submit">Sign in</button>
   </form>
 </div>
 
 <script>
-  if (new URLSearchParams(location.search).has('bad')) {
+  const params = new URLSearchParams(location.search);
+  if (params.has('bad')) {
     document.getElementById('err').classList.add('visible');
     document.getElementById('password').focus();
+  }
+  if (params.has('locked')) {
+    document.getElementById('locked').classList.add('visible');
   }
 </script>
 </body>
