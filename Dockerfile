@@ -29,9 +29,8 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 # STREAM_KEYS — comma-separated allowed stream keys. Empty = no publish auth.
 ENV STREAM_KEYS=""
 
-# VIEWER_PASSWORD — protect web UI + HLS with HTTP basic auth. Empty = open.
+# VIEWER_PASSWORD — protect web UI + HLS with an in-page password. Empty = open.
 ENV VIEWER_PASSWORD=""
-ENV VIEWER_USER="viewer"
 
 # ABR_MODE — auto | qsv | cpu | off
 #   auto = QSV if /dev/dri exists, else off (single bitrate)

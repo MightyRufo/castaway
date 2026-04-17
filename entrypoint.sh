@@ -121,25 +121,59 @@ else
 fi
 
 # ============================================================================
-# Viewer password (HTTP basic auth)
+# Viewer password — custom in-page login (no browser auth popup)
+#
 # VIEWER_PASSWORD=""        -> open access (default)
-# VIEWER_PASSWORD="hunter2" -> browser prompts for username/password.
-# VIEWER_USER="viewer"      -> username (default "viewer")
+# VIEWER_PASSWORD="hunter2" -> /login.html prompts for password; on success
+#                              an HttpOnly cookie 'castaway_auth' carrying a
+#                              random per-boot token is set.
 # ============================================================================
 if [ -n "${VIEWER_PASSWORD:-}" ]; then
-  USER="${VIEWER_USER:-viewer}"
-  HTPASSWD=/etc/nginx/.htpasswd
-  # bcrypt (-B) is the strongest format htpasswd supports.
-  htpasswd -nbB "$USER" "$VIEWER_PASSWORD" > "$HTPASSWD"
-  chown root:nginx "$HTPASSWD" 2>/dev/null || true
-  chmod 640 "$HTPASSWD"
-  cat > "$CONF_DIR/http-auth.conf" <<EOF
-auth_basic "Castaway";
-auth_basic_user_file $HTPASSWD;
+  # Per-boot random token. The cookie value is this opaque token, not the
+  # password — so the password itself is never exposed in cookie storage.
+  AUTH_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+
+  # http{} level: map cookie -> $authed (1 if valid, 0 otherwise).
+  cat > "$CONF_DIR/http-auth-map.conf" <<EOF
+map \$cookie_castaway_auth \$authed {
+    default 0;
+    "$AUTH_TOKEN" 1;
+}
 EOF
-  echo "castaway: viewer password ENABLED (user='$USER')"
+
+  # server-level snippet: handles /login.html, static assets the login page
+  # needs, and POST/GET to /auth/login. These must be open (no auth check).
+  cat > "$CONF_DIR/http-login-route.conf" <<EOF
+location = /login.html { root /var/www/html; }
+location = /icon.svg   { root /var/www/html; }
+
+location = /auth/login {
+    if (\$arg_password = "$VIEWER_PASSWORD") {
+        add_header Set-Cookie "castaway_auth=$AUTH_TOKEN; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000" always;
+        return 302 /;
+    }
+    return 302 /login.html?bad=1;
+}
+
+location = /auth/logout {
+    add_header Set-Cookie "castaway_auth=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" always;
+    return 302 /login.html;
+}
+EOF
+
+  # Per-protected-location: redirect to /login.html if not authed.
+  cat > "$CONF_DIR/http-auth-check.conf" <<'EOF'
+if ($authed = 0) { return 302 /login.html; }
+EOF
+
+  echo "castaway: viewer password ENABLED (in-page login)"
 else
-  : > "$CONF_DIR/http-auth.conf"
+  # Stub files so the includes don't fail when no password is set.
+  cat > "$CONF_DIR/http-auth-map.conf" <<'EOF'
+map $cookie_castaway_auth $authed { default 1; }
+EOF
+  : > "$CONF_DIR/http-login-route.conf"
+  : > "$CONF_DIR/http-auth-check.conf"
   echo "castaway: viewer password DISABLED (set VIEWER_PASSWORD to enable)"
 fi
 

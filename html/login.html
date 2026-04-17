@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Castaway · Sign in</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: linear-gradient(135deg, #0a0e1a, #1a2032);
+    color: #e8eaf0;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+    text-align: center;
+  }
+  .logo { width: 72px; height: 72px; margin: 0 auto 20px; }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .sub {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 24px;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  input[type="password"] {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #fff;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.15s;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+  input[type="password"]:focus {
+    border-color: #f4d03f;
+  }
+  button {
+    background: #f4d03f;
+    color: #1a1a1a;
+    border: none;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+  button:hover { background: #fcd95b; }
+  button:active { transform: scale(0.98); }
+  .error {
+    background: rgba(239,68,68,0.15);
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #fca5a5;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+  }
+  .error.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="logo" src="/icon.svg" alt="Castaway">
+  <h1>Castaway</h1>
+  <p class="sub">Enter the password to watch.</p>
+
+  <div id="err" class="error">Wrong password.</div>
+
+  <form id="login-form" method="GET" action="/auth/login" autocomplete="off">
+    <input type="password" id="password" name="password" placeholder="Password" autofocus required>
+    <button type="submit">Sign in</button>
+  </form>
+</div>
+
+<script>
+  if (new URLSearchParams(location.search).has('bad')) {
+    document.getElementById('err').classList.add('visible');
+    document.getElementById('password').focus();
+  }
+</script>
+</body>
+</html>
