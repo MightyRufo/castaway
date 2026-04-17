@@ -25,33 +25,28 @@
   </div>
 
   <div class="controls">
-    <button id="play-btn" class="ctl" title="Play/Pause (Space)"></button>
+    <button id="play-btn" class="ctl" title="Play/Pause"></button>
 
     <div class="vol-wrap">
-      <button id="mute-btn" class="ctl" title="Mute (M)"></button>
+      <button id="mute-btn" class="ctl" title="Mute"></button>
       <div class="vol-slider">
         <input type="range" id="vol-slider" min="0" max="1" step="0.01" value="1">
       </div>
     </div>
 
-    <button id="live-btn" class="live-jump synced" title="Jump to live (L)">Live</button>
+    <button id="live-btn" class="live-jump synced" title="Jump to live">Live</button>
 
     <span class="spacer"></span>
 
-    <select id="quality-select" class="quality-select" style="display:none">
-      <option value="-1">Auto</option>
-    </select>
-
-    <button id="stats-btn" class="ctl text" title="Stats (I)">Stats</button>
+    <button id="stats-btn" class="ctl text" title="Stats">Stats</button>
     <button id="pip-btn"   class="ctl"      title="Picture-in-picture"></button>
-    <button id="fs-btn"    class="ctl"      title="Fullscreen (F)"></button>
+    <button id="fs-btn"    class="ctl"      title="Fullscreen"></button>
   </div>
 
   <aside id="drawer" class="drawer">
     <button id="drawer-close" class="drawer-close">×</button>
 
     <h3>Connection</h3>
-    <div class="stat-row"><span class="label">Quality</span>        <span id="s-quality" class="value">—</span></div>
     <div class="stat-row"><span class="label">Resolution</span>     <span id="s-res"     class="value">—</span></div>
     <div class="stat-row"><span class="label">Video bitrate</span>  <span id="s-vbr"     class="value">—</span></div>
     <div class="stat-row"><span class="label">Bandwidth est.</span> <span id="s-bw"      class="value">—</span></div>
@@ -62,13 +57,6 @@
 
     <h3>Share</h3>
     <div class="share-url" id="share-url"></div>
-
-    <h3>Shortcuts</h3>
-    <div class="stat-row"><span class="label">Play / Pause</span><span class="value">Space</span></div>
-    <div class="stat-row"><span class="label">Mute</span>        <span class="value">M</span></div>
-    <div class="stat-row"><span class="label">Fullscreen</span>  <span class="value">F</span></div>
-    <div class="stat-row"><span class="label">Jump to live</span><span class="value">L</span></div>
-    <div class="stat-row"><span class="label">Stats</span>       <span class="value">I</span></div>
   </aside>
 </div>
 

@@ -16,7 +16,7 @@ When viewers say "the stream is laggy" you can immediately see whether it's thei
 - **In-page password gate** — `VIEWER_PASSWORD`. Custom branded login form (no native browser popup), HttpOnly per-boot token cookie. The password is never written to the cookie.
 - **Viewer-side stats drawer** — resolution, video bitrate, bandwidth estimate, buffer, latency, dropped frames, stalls. Toggle with `I`.
 - **Auto-reconnect** with backoff when the stream drops.
-- **Mobile responsive**, **keyboard shortcuts**, **picture-in-picture**.
+- **Mobile responsive**, **picture-in-picture**.
 - **Proxy/tunnel safe** — relative redirects so it works behind Cloudflare Tunnel, NPM, Traefik, port remaps.
 
 ## Quick start
@@ -73,17 +73,6 @@ OBS  ──RTMP──>  /live/<STREAM_KEY>  ──push──>  /show/stream  ─
 ## Security note
 
 `VIEWER_PASSWORD` and `ADMIN_PASSWORD` use HttpOnly cookies set after server-side password checks. Over plain HTTP that's still cleartext on the wire. **For LAN this is fine.** If you expose Castaway to the internet, terminate TLS in front (NPM, Cloudflare Tunnel, Traefik, Caddy).
-
-## Keyboard shortcuts
-
-| Key | Action |
-|---|---|
-| `Space` | Play / Pause |
-| `M` | Mute |
-| `F` | Fullscreen |
-| `L` | Jump to live edge |
-| `I` | Toggle stats drawer |
-| `Esc` | Close stats drawer |
 
 ## Build from source
 

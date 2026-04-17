@@ -27,7 +27,6 @@
   const drawer = $('drawer');
   const drawerCloseBtn = $('drawer-close');
   const statsBtn = $('stats-btn');
-  const qualitySelect = $('quality-select');
 
   /* ---- Helpers ---- */
   const setPill = (live) => {
@@ -93,10 +92,6 @@
   };
   statsBtn.onclick = () => drawer.classList.toggle('open');
   drawerCloseBtn.onclick = () => drawer.classList.remove('open');
-  qualitySelect.onchange = () => {
-    if (!hls) return;
-    hls.currentLevel = parseInt(qualitySelect.value, 10);
-  };
 
   video.addEventListener('play', updatePlay);
   video.addEventListener('pause', updatePlay);
@@ -125,18 +120,20 @@
 
   /* ---- Stats ---- */
   let stallCount = 0;
+  let recentFragBytes = 0;
+  let recentFragSecs = 0;
   video.addEventListener('waiting', () => { stallCount++; });
 
   const tickStats = () => {
     if (!hls) {
-      ['s-quality','s-res','s-vbr','s-bw','s-buf','s-lat','s-drop'].forEach(id => setVal(id, '—'));
+      ['s-res','s-vbr','s-bw','s-buf','s-lat','s-drop'].forEach(id => setVal(id, '—'));
       return;
     }
-    const lvl = hls.levels?.[hls.currentLevel];
-    if (lvl) {
-      setVal('s-res', `${lvl.width}×${lvl.height}`);
-      setVal('s-vbr', fmtBps(lvl.bitrate));
-      setVal('s-quality', hls.autoLevelEnabled ? `Auto (${lvl.height}p)` : `${lvl.height}p`);
+    if (video.videoWidth > 0) {
+      setVal('s-res', `${video.videoWidth}×${video.videoHeight}`);
+    }
+    if (recentFragSecs > 0) {
+      setVal('s-vbr', fmtBps((recentFragBytes * 8) / recentFragSecs));
     }
     setVal('s-bw', fmtBps(hls.bandwidthEstimate));
     const buf = video.buffered;
@@ -166,7 +163,6 @@
 
   function teardownHls() {
     if (hls) { try { hls.destroy(); } catch {} ; hls = null; }
-    qualitySelect.style.display = 'none';
   }
 
   function initHls() {
@@ -195,6 +191,15 @@
       setOffline(false);
       setPill(true);
       video.play().catch(() => {});
+    });
+    hls.on(Hls.Events.FRAG_LOADED, (_, data) => {
+      const bytes = data.frag?.stats?.total || data.payload?.byteLength || 0;
+      const secs = data.frag?.duration || 0;
+      if (bytes > 0 && secs > 0) {
+        // Rolling average over last 4 fragments.
+        recentFragBytes = recentFragBytes * 0.75 + bytes * 0.25;
+        recentFragSecs  = recentFragSecs  * 0.75 + secs  * 0.25;
+      }
     });
     hls.on(Hls.Events.ERROR, (_, data) => {
       if (!data.fatal) return;
@@ -260,14 +265,4 @@
   setInterval(heartbeat, 5000);
   setInterval(tickStats, 1000);
 
-  /* ---- Keyboard shortcuts ---- */
-  document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    if      (e.code === 'Space')                { e.preventDefault(); playBtn.click(); }
-    else if (e.key === 'm' || e.key === 'M')    muteBtn.click();
-    else if (e.key === 'f' || e.key === 'F')    fsBtn.click();
-    else if (e.key === 'l' || e.key === 'L')    liveBtn.click();
-    else if (e.key === 'i' || e.key === 'I')    statsBtn.click();
-    else if (e.key === 'Escape')                drawer.classList.remove('open');
-  });
 })();
