@@ -100,9 +100,10 @@ else
   # works — viewers fall back to /hls/stream.m3u8.
   {
     printf '%s\n' "$BASE_PUSH"
-    # ffmpeg stderr -> /proc/1/fd/2 (PID 1 is nginx, its stderr is the
-    # container's stderr, which is what `docker logs castaway` shows).
-    printf 'exec ffmpeg -hide_banner -loglevel info %s -i rtmp://127.0.0.1:1935/live/$name %s -c:a aac -b:a 96k  -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_480p %s -c:a aac -b:a 128k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_720p %s -c:a aac -b:a 160k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_1080p 2>/proc/1/fd/2;\n' \
+    # ffmpeg stderr -> /var/log/ffmpeg-abr.log; entrypoint tails it to
+    # docker logs. Going via a file because nginx remaps its own fd 2 to
+    # the configured error_log, so /proc/1/fd/2 doesn't reach docker stderr.
+    printf 'exec ffmpeg -hide_banner -loglevel info %s -i rtmp://127.0.0.1:1935/live/$name %s -c:a aac -b:a 96k  -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_480p %s -c:a aac -b:a 128k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_720p %s -c:a aac -b:a 160k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_1080p 2>>/var/log/ffmpeg-abr.log;\n' \
       "$ENC" "$V480" "$V720" "$V1080"
   } > "$CONF_DIR/live-relay.conf"
   cat > "$CONF_DIR/http-abr.conf" <<'EOF'

@@ -37,7 +37,16 @@ else
 fi
 
 # Background the admin server. Output goes to stdout so docker logs picks it up.
-python3 /opt/castaway/server.py 2>&1 &
+python3 -u /opt/castaway/server.py 2>&1 &
+
+# Tail the ffmpeg ABR log into docker stderr so we can see transcode
+# output / errors from `docker logs castaway`. Without this we'd have to
+# `docker exec` to read the file — nginx remaps its own fd 2 to its
+# error.log file once it takes over PID 1, so a direct redirect to
+# /proc/1/fd/2 doesn't reach docker.
+mkdir -p /var/log
+: >> /var/log/ffmpeg-abr.log
+( tail -F /var/log/ffmpeg-abr.log 2>/dev/null | sed -u 's/^/[ffmpeg-abr] /' >&2 ) &
 
 # Validate config one more time before exec.
 nginx -t
