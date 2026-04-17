@@ -122,13 +122,7 @@
     $('rtmp-url').textContent = `rtmp://${host}:1935/live`;
     $('watch-url').textContent = `${location.protocol}//${host}:8080/`;
 
-    // Connected viewers
-    const fmtUptime = (sec) => {
-      const m = Math.floor(sec / 60), ss = sec % 60;
-      if (m >= 60) return `${Math.floor(m/60)}h ${m%60}m`;
-      if (m >= 1)  return `${m}m ${ss}s`;
-      return `${ss}s`;
-    };
+    // Connected viewers — uses the module-level fmtUptime defined at top.
     const list = s.clients || [];
     $('viewers-count').textContent = list.length ? `(${list.length})` : '';
     const box = $('viewers-list');
