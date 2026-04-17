@@ -224,14 +224,18 @@
       const next = !!s.publishing;
       if (publishing !== next) {
         publishing = next;
-        if (publishing) {
-          setOffline(true, '<span class="reconnect-dot"></span>Connecting…');
-          initHls();
-        } else {
+        if (!publishing) {
           setPill(false);
           setOffline(true, 'Stream offline. Waiting for the broadcast to start…');
           teardownHls();
         }
+      }
+      // Retry initHls every poll tick while publishing is true but hls is torn
+      // down (first manifest may 404 if admin detects publisher before nginx-rtmp
+      // has written the first fragment).
+      if (publishing && !hls) {
+        setOffline(true, '<span class="reconnect-dot"></span>Connecting…');
+        initHls();
       }
     } catch {
       suspended = Math.min(suspended + 1, 8);
