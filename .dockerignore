@@ -5,3 +5,5 @@ LICENSE
 README.md
 unraid-template.xml
 *.md
+__pycache__/
+*.pyc

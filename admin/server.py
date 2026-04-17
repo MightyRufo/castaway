@@ -111,15 +111,13 @@ def gather_stats() -> dict[str, Any]:
 
     server_uptime = int(_stat_text(root, "uptime", "0") or "0") // 1000
 
-    # The relay (push or ffmpeg-exec) makes the source stream show up under
-    # the `show` application, not `live`. So /show/stream is the source of
-    # truth for whether something is being published. Variants (stream_480p
-    # etc.) live alongside it.
+    # The push relay makes the source stream show up under the `show`
+    # application, not `live`. /show/stream is the source of truth for
+    # whether something is being published.
     publishing = False
     source_bw_in = 0
     source_bytes_in = 0
     viewers = 0
-    variants: list[dict[str, Any]] = []
     if root is not None:
         for app in root.iter("application"):
             name = _stat_text(app, "name")
@@ -130,24 +128,18 @@ def gather_stats() -> dict[str, Any]:
                 continue
             for stream in live_el.findall("stream"):
                 sname = _stat_text(stream, "name")
+                if sname != "stream":
+                    continue
                 bw_in = int(_stat_text(stream, "bw_in", "0") or 0)
                 bytes_in = int(_stat_text(stream, "bytes_in", "0") or 0)
                 nclients = int(_stat_text(stream, "nclients", "0") or 0)
                 pub = stream.find("publishing")
-
-                if sname == "stream":
-                    if pub is not None:
-                        publishing = True
-                    source_bw_in = bw_in
-                    source_bytes_in = bytes_in
-                    # Subtract 1 for the publisher itself.
-                    viewers = max(0, nclients - 1)
-                elif sname.startswith("stream_"):
-                    variants.append({
-                        "name": sname,
-                        "bw_in": bw_in,
-                        "viewers": max(0, nclients - 1),
-                    })
+                if pub is not None:
+                    publishing = True
+                source_bw_in = bw_in
+                source_bytes_in = bytes_in
+                # Subtract 1 for the publisher itself.
+                viewers = max(0, nclients - 1)
 
     cpu = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
@@ -158,7 +150,6 @@ def gather_stats() -> dict[str, Any]:
         "viewers": viewers,
         "source_bw_in": source_bw_in,
         "source_bytes_in": source_bytes_in,
-        "variants": variants,
         "server_uptime": server_uptime,
         "system": {
             "cpu_percent": cpu,
@@ -168,7 +159,6 @@ def gather_stats() -> dict[str, Any]:
             "disk_used_mb": int(disk.used / 1024 / 1024),
             "disk_total_mb": int(disk.total / 1024 / 1024),
         },
-        "gpu_present": Path("/dev/dri/renderD128").exists(),
     }
 
 

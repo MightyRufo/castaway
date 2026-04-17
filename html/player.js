@@ -51,7 +51,7 @@
     return bps.toFixed(0) + ' bps';
   };
 
-  /* ---- Icons / controls (unchanged from v0.4) ---- */
+  /* ---- Icons / controls ---- */
   const ICONS = {
     play:  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
     pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
@@ -226,8 +226,7 @@
         publishing = next;
         if (publishing) {
           setOffline(true, '<span class="reconnect-dot"></span>Connecting…');
-          // Prefer master if abr is reported on, else direct.
-          initHls(s.abr ? HLS_MASTER : HLS_SINGLE);
+          initHls();
         } else {
           setPill(false);
           setOffline(true, 'Stream offline. Waiting for the broadcast to start…');

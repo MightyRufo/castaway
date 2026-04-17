@@ -84,21 +84,6 @@
     setText('kv-bw', fmtBps(stats.source_bw_in));
     setText('kv-bytes', fmtBytes(stats.source_bytes_in));
     setText('kv-uptime', fmtUptime(stats.server_uptime));
-    setText('kv-gpu', stats.gpu_present ? 'Detected' : 'None', stats.gpu_present ? 'good' : '');
-
-    // Variants
-    const vbox = $('variants');
-    if (stats.variants && stats.variants.length) {
-      vbox.innerHTML = stats.variants
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(v => `
-          <div class="variant-chip">
-            <div class="v-name">${v.name.replace('stream_', '')}</div>
-            <div class="v-bw">${fmtBps(v.bw_in)} · ${v.viewers} viewers</div>
-          </div>`).join('');
-    } else {
-      vbox.innerHTML = '';
-    }
 
     // System
     const sys = stats.system;

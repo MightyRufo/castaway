@@ -203,22 +203,6 @@ a:hover { text-decoration: underline; }
 .kv .value.warn { color: var(--warn); }
 .kv .value.bad  { color: var(--bad);  }
 
-.variants {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
-.variant-chip {
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 12px;
-}
-.variant-chip .v-name { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-.variant-chip .v-bw   { font-size: 14px; font-weight: 600; margin-top: 4px; }
-
 .field { display: block; margin-bottom: 16px; }
 .field:last-child { margin-bottom: 0; }
 .field-label {
