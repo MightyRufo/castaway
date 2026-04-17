@@ -92,11 +92,12 @@
     </label>
 
     <div class="field">
-      <span class="field-label">Watch URL</span>
+      <span class="field-label">Watch URL <small>(auto-detected from this page's hostname)</small></span>
       <div class="row">
-        <input type="text" id="watch-url" readonly>
+        <code id="watch-url" class="readonly-code">—</code>
         <button id="copy-watch-btn" class="ghost-btn">Copy</button>
       </div>
+      <div class="hint">Reflects whatever URL you used to reach the admin. Cloudflare Tunnel hostname or LAN IP, whichever applies.</div>
     </div>
   </section>
 

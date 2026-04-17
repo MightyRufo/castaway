@@ -115,10 +115,12 @@
       ? 'Set — viewers must enter a password to watch.'
       : 'Empty — viewers can watch without a password.';
 
-    // OBS / watch URLs (use the host the admin is currently on)
+    // OBS / watch URLs derived from the admin host. Cloudflare Tunnel users
+    // will see the tunnel hostname automatically since the page knows what
+    // hostname it was loaded from.
     const host = location.hostname;
     $('rtmp-url').textContent = `rtmp://${host}:1935/live`;
-    $('watch-url').value = `${location.protocol}//${host}:8080/`;
+    $('watch-url').textContent = `${location.protocol}//${host}:8080/`;
   }
 
   /* --- Event wiring --- */
@@ -151,17 +153,31 @@
     }
   });
 
-  $('copy-key-btn').addEventListener('click', () => {
-    const v = $('cfg-key').value;
-    if (!v) return;
-    navigator.clipboard?.writeText(v).then(() => toast('Stream key copied', 'success'));
-  });
+  // Copy that works in non-secure contexts too (LAN IPs over plain HTTP
+  // can't use navigator.clipboard).
+  async function copyText(text, label) {
+    if (!text) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        toast(label + ' copied', 'success');
+        return;
+      }
+    } catch (_) { /* fall through to legacy */ }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
+    toast(ok ? (label + ' copied') : 'Copy failed — select manually', ok ? 'success' : 'error');
+  }
 
-  $('copy-watch-btn').addEventListener('click', () => {
-    const v = $('watch-url').value;
-    if (!v) return;
-    navigator.clipboard?.writeText(v).then(() => toast('Watch URL copied', 'success'));
-  });
+  $('copy-key-btn').addEventListener('click', () => copyText($('cfg-key').value, 'Stream key'));
+  $('copy-watch-btn').addEventListener('click', () => copyText($('watch-url').textContent.trim(), 'Watch URL'));
 
   $('logout-btn').addEventListener('click', () => {
     location.href = '/api/auth/logout';

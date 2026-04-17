@@ -250,6 +250,19 @@ a:hover { text-decoration: underline; }
 .field .hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
 .field .hint code { background: var(--bg-elev-2); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 
+.readonly-code {
+  flex: 1;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px;
+  user-select: all;
+  word-break: break-all;
+}
+
 /* Toast */
 .toast {
   position: fixed;
