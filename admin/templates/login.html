@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Castaway Admin · Sign in</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body class="auth-bg">
+<div class="auth-card">
+  <img class="auth-logo" src="/static/icon.svg" alt="Castaway">
+  <h1>Castaway Admin</h1>
+  <p class="sub">Sign in to manage your stream.</p>
+  {% if bad %}<div class="error">Wrong password.</div>{% endif %}
+  <form method="POST" action="/api/auth/login" autocomplete="off">
+    <input type="password" name="password" placeholder="Admin password" autofocus required>
+    <button type="submit">Sign in</button>
+  </form>
+</div>
+</body>
+</html>

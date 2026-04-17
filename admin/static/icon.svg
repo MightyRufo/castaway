@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1628"/>
+      <stop offset="1" stop-color="#1a2842"/>
+    </linearGradient>
+    <linearGradient id="island" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4d03f"/>
+      <stop offset="1" stop-color="#d4a017"/>
+    </linearGradient>
+    <linearGradient id="palm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#27ae60"/>
+      <stop offset="1" stop-color="#16a085"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Signal waves emanating from palm top -->
+  <g fill="none" stroke="#ef4444" stroke-linecap="round" opacity="0.85">
+    <path d="M 200 130 Q 256 90 312 130" stroke-width="10"/>
+    <path d="M 170 100 Q 256 50 342 100" stroke-width="10" opacity="0.7"/>
+    <path d="M 140 70  Q 256 10 372 70"  stroke-width="10" opacity="0.5"/>
+  </g>
+
+  <!-- Sand island -->
+  <ellipse cx="256" cy="430" rx="200" ry="40" fill="url(#island)"/>
+
+  <!-- Palm trunk -->
+  <path d="M 248 410 Q 235 320 256 230 Q 278 175 268 150 L 252 150 Q 244 200 232 280 Q 224 360 232 410 Z"
+        fill="#6b4226" stroke="#3e2511" stroke-width="2"/>
+
+  <!-- Palm fronds -->
+  <g fill="url(#palm)" stroke="#0e6b3a" stroke-width="2" stroke-linejoin="round">
+    <path d="M 256 160 Q 200 130 130 145 Q 180 165 215 175 Q 175 185 140 215 Q 200 200 240 195 Z"/>
+    <path d="M 256 160 Q 312 130 382 145 Q 332 165 297 175 Q 337 185 372 215 Q 312 200 272 195 Z"/>
+    <path d="M 256 160 Q 235 90 200 60  Q 220 130 232 165 Q 200 130 165 105 Q 215 155 248 175 Z"/>
+    <path d="M 256 160 Q 277 90 312 60  Q 292 130 280 165 Q 312 130 347 105 Q 297 155 264 175 Z"/>
+  </g>
+
+  <!-- Coconuts -->
+  <circle cx="240" cy="175" r="9" fill="#3e2511"/>
+  <circle cx="272" cy="175" r="9" fill="#3e2511"/>
+</svg>

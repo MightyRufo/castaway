@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Castaway Admin</title>
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+
+<header class="topbar">
+  <img class="logo" src="/static/icon.svg" alt="">
+  <h1>Castaway <span class="muted">Admin</span></h1>
+  <span class="spacer"></span>
+  <span id="status-pill" class="pill off">Idle</span>
+  <button id="logout-btn" class="ghost-btn">Sign out</button>
+</header>
+
+<main class="dash">
+
+  <!-- Live status -->
+  <section class="card wide">
+    <h2>Live</h2>
+    <div class="kv">
+      <div><span class="label">Status</span><span id="kv-publish" class="value">—</span></div>
+      <div><span class="label">Viewers</span><span id="kv-viewers" class="value">—</span></div>
+      <div><span class="label">Source bitrate</span><span id="kv-bw" class="value">—</span></div>
+      <div><span class="label">Total ingested</span><span id="kv-bytes" class="value">—</span></div>
+      <div><span class="label">Server uptime</span><span id="kv-uptime" class="value">—</span></div>
+      <div><span class="label">GPU</span><span id="kv-gpu" class="value">—</span></div>
+    </div>
+    <div id="variants" class="variants"></div>
+  </section>
+
+  <!-- System -->
+  <section class="card">
+    <h2>System</h2>
+    <div class="kv">
+      <div><span class="label">CPU</span><span id="kv-cpu" class="value">—</span></div>
+      <div><span class="label">Memory</span><span id="kv-mem" class="value">—</span></div>
+      <div><span class="label">HLS disk</span><span id="kv-disk" class="value">—</span></div>
+    </div>
+  </section>
+
+  <!-- Stream -->
+  <section class="card wide">
+    <h2>Stream</h2>
+
+    <label class="field">
+      <span class="field-label">Stream title <small>(shown to viewers)</small></span>
+      <div class="row">
+        <input type="text" id="cfg-title" placeholder="My Stream">
+        <button class="primary-btn" data-save="stream_title">Save</button>
+      </div>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Stream key <small>(OBS publish password — keep private)</small></span>
+      <div class="row">
+        <input type="text" id="cfg-key" readonly>
+        <button id="copy-key-btn" class="ghost-btn" title="Copy">Copy</button>
+        <button id="regen-key-btn" class="danger-btn">Regenerate</button>
+      </div>
+      <div class="hint">OBS Server: <code id="rtmp-url">—</code><br>OBS Stream Key: the value above.</div>
+    </label>
+
+    <label class="field">
+      <span class="field-label">ABR mode</span>
+      <div class="row">
+        <select id="cfg-abr">
+          <option value="auto">Auto (use GPU if present)</option>
+          <option value="qsv">QSV (Intel hardware)</option>
+          <option value="cpu">CPU (libx264)</option>
+          <option value="off">Off (single bitrate)</option>
+        </select>
+        <button class="primary-btn" data-save="abr_mode">Save</button>
+      </div>
+    </label>
+  </section>
+
+  <!-- Viewer access -->
+  <section class="card">
+    <h2>Viewer access</h2>
+    <label class="field">
+      <span class="field-label">Viewer password</span>
+      <div class="row">
+        <input type="password" id="cfg-viewer-pw" placeholder="(leave empty to allow open access)">
+        <button class="primary-btn" data-save="viewer_password">Save</button>
+      </div>
+      <div id="viewer-pw-status" class="hint"></div>
+    </label>
+
+    <div class="field">
+      <span class="field-label">Watch URL</span>
+      <div class="row">
+        <input type="text" id="watch-url" readonly>
+        <button id="copy-watch-btn" class="ghost-btn">Copy</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/static/admin.js"></script>
+</body>
+</html>
