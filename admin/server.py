@@ -186,6 +186,16 @@ def _is_authed() -> bool:
     return request.cookies.get("castaway_admin") == SESSION_TOKEN
 
 
+@app.after_request
+def _no_cache(resp: Any) -> Any:
+    """Stop browsers caching admin JS/CSS/HTML — release cadence is high
+    and stale assets break the dashboard."""
+    if request.path.startswith("/static/") or request.path == "/" or request.path == "/login":
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
 @app.before_request
 def _gate() -> Any:
     """Redirect to login for HTML, return 401 for API.
