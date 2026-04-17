@@ -95,12 +95,9 @@ if [ "$ABR_MODE" != "off" ]; then
     V1080="-c:v libx264 -preset veryfast -tune zerolatency -b:v 5500k -maxrate 6500k -bufsize 11000k -vf scale=1920:1080"
   fi
 
-  cat > "$CONF_DIR/rtmp-abr.conf" <<EOF
-exec ffmpeg -hide_banner -loglevel warning $ENC -i rtmp://127.0.0.1:1935/live/\$name \\
-  $V480  -c:a aac -b:a 96k  -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/stream/\${name}_480p \\
-  $V720  -c:a aac -b:a 128k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/stream/\${name}_720p \\
-  $V1080 -c:a aac -b:a 160k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/stream/\${name}_1080p
-EOF
+  # nginx-rtmp `exec` is one logical line, terminated by ';'. Keep it flat.
+  printf 'exec ffmpeg -hide_banner -loglevel warning %s -i rtmp://127.0.0.1:1935/live/$name %s -c:a aac -b:a 96k  -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/stream/${name}_480p %s -c:a aac -b:a 128k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/stream/${name}_720p %s -c:a aac -b:a 160k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/stream/${name}_1080p;\n' \
+    "$ENC" "$V480" "$V720" "$V1080" > "$CONF_DIR/rtmp-abr.conf"
 
   cat > "$CONF_DIR/http-abr.conf" <<'EOF'
 location ~ ^/hls/(?<channel>[a-zA-Z0-9_-]+)_master\.m3u8$ {
