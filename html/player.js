@@ -4,35 +4,15 @@
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  /* ---- Right-click + devtools deterrent (best-effort) ---- */
-  const protectionWarning = document.getElementById('protection-warning');
-  let warningHideTimer = null;
-  const showWarning = () => {
-    if (!protectionWarning) return;
-    protectionWarning.hidden = false;
-    clearTimeout(warningHideTimer);
-    warningHideTimer = setTimeout(() => { protectionWarning.hidden = true; }, 4000);
-  };
-  document.addEventListener('contextmenu', (e) => { e.preventDefault(); showWarning(); });
+  /* ---- Right-click + key deterrent (best-effort, silent) ---- */
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('keydown', (e) => {
-    // F12, Ctrl+Shift+I/J/C, Ctrl+U
     if (e.key === 'F12' ||
         (e.ctrlKey && e.shiftKey && /^[IJC]$/i.test(e.key)) ||
         (e.ctrlKey && /^u$/i.test(e.key))) {
       e.preventDefault();
-      showWarning();
     }
   });
-  // DevTools open detection: window panel takes screen space, OR debugger
-  // statement timing balloons when devtools is open. Either trips the warning.
-  setInterval(() => {
-    const panelDelta = (window.outerWidth - window.innerWidth) > 160
-                    || (window.outerHeight - window.innerHeight) > 160;
-    const t0 = performance.now();
-    debugger;  // no-op unless devtools is open and "pause on debugger" is set
-    const debuggerStall = performance.now() - t0 > 100;
-    if (panelDelta || debuggerStall) showWarning();
-  }, 2000);
 
   const HLS_URL = '/hls/stream.m3u8';
   const STATE_URL  = '/api/streamstate';
