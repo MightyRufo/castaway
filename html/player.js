@@ -1,12 +1,17 @@
-/* Castaway player — single-stream, fullscreen, minimal overlay,
-   slide-out stats drawer, ABR quality selector. */
+/* Castaway player — fullscreen, single-stream, polling-driven state machine.
+   Polls /api/streamstate every 3s. HLS instance only exists when actually
+   publishing — no error-loop blink while waiting for a stream to start. */
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  // Single-stream model — channel name is fixed internally. Viewers never
-  // see or set it. The OBS publish key is private and lives only on the server.
   const HLS_SINGLE = '/hls/stream.m3u8';
   const HLS_MASTER = '/hls/stream_master.m3u8';
+  const STATE_URL  = '/api/streamstate';
+  const HEARTBEAT_URL = '/api/heartbeat';
+
+  // Per-page-load random session id used by the heartbeat call.
+  const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) ||
+    (Date.now() + '-' + Math.random().toString(36).slice(2));
 
   const stage   = $('stage');
   const video   = $('video');
@@ -25,14 +30,6 @@
   const statsBtn = $('stats-btn');
   const qualitySelect = $('quality-select');
 
-  // Pull title from the server config endpoint, fall back to "Live Stream".
-  fetch('/api/config').then(r => r.json()).then(cfg => {
-    if (cfg && cfg.title) {
-      titleText.textContent = cfg.title;
-      document.title = `${cfg.title} · Castaway`;
-    }
-  }).catch(() => {});
-
   /* ---- Helpers ---- */
   const setPill = (live) => {
     livePill.textContent = live ? 'Live' : 'Offline';
@@ -43,8 +40,7 @@
     else offline.classList.remove('visible');
   };
   const setVal = (id, v, cls) => {
-    const el = $(id);
-    if (!el) return;
+    const el = $(id); if (!el) return;
     el.textContent = v;
     el.classList.remove('good','warn','bad');
     if (cls) el.classList.add(cls);
@@ -56,7 +52,7 @@
     return bps.toFixed(0) + ' bps';
   };
 
-  /* ---- Icons ---- */
+  /* ---- Icons / controls (unchanged from v0.4) ---- */
   const ICONS = {
     play:  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
     pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
@@ -70,7 +66,6 @@
   fsBtn.innerHTML   = ICONS.fs;
   pipBtn.innerHTML  = ICONS.pip;
 
-  /* ---- Controls ---- */
   const updatePlay = () => { playBtn.innerHTML = video.paused ? ICONS.play : ICONS.pause; };
   const updateMute = () => { muteBtn.innerHTML = (video.muted || video.volume === 0) ? ICONS.muted : ICONS.mute; };
 
@@ -81,7 +76,6 @@
     video.muted = video.volume === 0;
     updateMute();
   };
-
   fsBtn.onclick = () => {
     if (document.fullscreenElement) document.exitFullscreen();
     else stage.requestFullscreen?.();
@@ -109,7 +103,7 @@
   video.addEventListener('pause', updatePlay);
   video.addEventListener('volumechange', updateMute);
 
-  /* ---- Auto-hide UI after 2.5s of cursor inactivity ---- */
+  /* ---- Auto-hide UI ---- */
   let hideTimer;
   const showUI = () => {
     stage.classList.remove('hide-ui');
@@ -120,7 +114,6 @@
   stage.addEventListener('touchstart', showUI);
   showUI();
 
-  /* ---- Click-to-play, double-click for fullscreen ---- */
   let clickTimer = null;
   video.addEventListener('click', () => {
     if (clickTimer) {
@@ -136,7 +129,10 @@
   video.addEventListener('waiting', () => { stallCount++; });
 
   const tickStats = () => {
-    if (!hls) return;
+    if (!hls) {
+      ['s-quality','s-res','s-vbr','s-bw','s-buf','s-lat','s-drop'].forEach(id => setVal(id, '—'));
+      return;
+    }
     const lvl = hls.levels?.[hls.currentLevel];
     if (lvl) {
       setVal('s-res', `${lvl.width}×${lvl.height}`);
@@ -166,72 +162,116 @@
     }
   };
 
-  /* ---- HLS lifecycle ---- */
-  let hls;
-  let reconnectTimer;
-  let consecutiveErrors = 0;
+  /* ---- HLS lifecycle (state-machine driven by polling) ---- */
+  let hls = null;
+  let triedFallback = false;
 
-  const tryLoad = async () => {
-    setOffline(true, '<span class="reconnect-dot"></span>Connecting…');
+  function teardownHls() {
+    if (hls) { try { hls.destroy(); } catch {} ; hls = null; }
+    triedFallback = false;
+    qualitySelect.style.display = 'none';
+  }
 
-    // ABR master playlist if the server has it, otherwise single bitrate.
-    let src = HLS_SINGLE;
-    try {
-      const r = await fetch(HLS_MASTER, { method: 'HEAD' });
-      if (r.ok) src = HLS_MASTER;
-    } catch (_) {}
-
-    if (window.Hls && Hls.isSupported()) {
-      hls = new Hls({
-        lowLatencyMode: true,
-        liveSyncDuration: 4,
-        liveMaxLatencyDuration: 10,
-        manifestLoadingMaxRetry: 0,
-        levelLoadingMaxRetry: 0,
-        fragLoadingMaxRetry: 1,
-        xhrSetup: (xhr) => { xhr.withCredentials = true; },  // send cookie on HLS XHRs
-      });
-      hls.loadSource(src);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        consecutiveErrors = 0;
-        setOffline(false);
-        setPill(true);
-        if (data.levels && data.levels.length > 1) {
-          qualitySelect.innerHTML = '<option value="-1">Auto</option>' +
-            data.levels.map((lvl, i) =>
-              `<option value="${i}">${lvl.height}p</option>`).join('');
-          qualitySelect.style.display = '';
-        } else {
-          qualitySelect.style.display = 'none';
-        }
+  function initHls(src) {
+    teardownHls();
+    if (!window.Hls || !Hls.isSupported()) {
+      // Native Safari path
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src;
         video.play().catch(() => {});
-      });
-
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (!data.fatal) return;
-        consecutiveErrors++;
-        setPill(false);
-        const wait = Math.min(15000, 1500 * consecutiveErrors);
-        setOffline(true, `<span class="reconnect-dot"></span>Stream offline. Reconnecting in ${(wait/1000).toFixed(0)}s…`);
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(() => { try { hls.destroy(); } catch {} ; tryLoad(); }, wait);
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src;
-      video.addEventListener('loadedmetadata', () => { setOffline(false); setPill(true); video.play().catch(() => {}); });
-      video.addEventListener('error', () => {
-        setPill(false);
-        setOffline(true, '<span class="reconnect-dot"></span>Stream offline. Reconnecting…');
-        setTimeout(tryLoad, 4000);
-      });
-    } else {
-      setOffline(true, 'Your browser does not support HLS playback.');
+      } else {
+        setOffline(true, 'Your browser does not support HLS playback.');
+      }
+      return;
     }
-  };
+    hls = new Hls({
+      lowLatencyMode: true,
+      liveSyncDuration: 4,
+      liveMaxLatencyDuration: 10,
+      manifestLoadingMaxRetry: 1,
+      levelLoadingMaxRetry: 1,
+      fragLoadingMaxRetry: 2,
+      xhrSetup: (xhr) => { xhr.withCredentials = true; },
+    });
+    hls.loadSource(src);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+      setOffline(false);
+      setPill(true);
+      if (data.levels && data.levels.length > 1) {
+        qualitySelect.innerHTML = '<option value="-1">Auto</option>' +
+          data.levels.map((lvl, i) => `<option value="${i}">${lvl.height}p</option>`).join('');
+        qualitySelect.style.display = '';
+      } else {
+        qualitySelect.style.display = 'none';
+      }
+      video.play().catch(() => {});
+    });
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (!data.fatal) return;
+      // First fatal? If we're on the master, fall back to single-bitrate.
+      if (!triedFallback && src === HLS_MASTER) {
+        triedFallback = true;
+        initHls(HLS_SINGLE);
+        return;
+      }
+      // Otherwise: tear down and let the polling loop bring us back when
+      // publishing flips true again. No reconnect-loop blink.
+      teardownHls();
+    });
+  }
 
-  tryLoad();
+  /* ---- State machine: poll /api/streamstate ---- */
+  let publishing = null;  // null = unknown, true/false thereafter
+  let suspended = 0;      // backoff count when /api/streamstate fails
+
+  async function pollState() {
+    try {
+      const r = await fetch(STATE_URL, { credentials: 'same-origin' });
+      if (!r.ok) {
+        // 401 = lost auth; reload to bounce through login.
+        if (r.status === 401) { location.reload(); return; }
+        throw new Error('http ' + r.status);
+      }
+      suspended = 0;
+      const s = await r.json();
+      titleText.textContent = s.title || 'Live Stream';
+      document.title = `${s.title || 'Live Stream'} · Castaway`;
+
+      const next = !!s.publishing;
+      if (publishing !== next) {
+        publishing = next;
+        if (publishing) {
+          setOffline(true, '<span class="reconnect-dot"></span>Connecting…');
+          // Prefer master if abr is reported on, else direct.
+          initHls(s.abr ? HLS_MASTER : HLS_SINGLE);
+        } else {
+          setPill(false);
+          setOffline(true, 'Stream offline. Waiting for the broadcast to start…');
+          teardownHls();
+        }
+      }
+    } catch {
+      suspended = Math.min(suspended + 1, 8);
+    }
+  }
+
+  /* ---- Heartbeat ---- */
+  function heartbeat() {
+    fetch(HEARTBEAT_URL, {
+      method: 'POST',
+      headers: { 'X-Castaway-Session': SESSION_ID },
+      credentials: 'same-origin',
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  // Initial state + intervals.
+  setOffline(true, 'Connecting…');
+  setPill(false);
+  pollState(); heartbeat();
+  setInterval(() => { if (suspended === 0) pollState(); else if (--suspended === 0) pollState(); }, 3000);
+  setInterval(heartbeat, 5000);
   setInterval(tickStats, 1000);
 
   /* ---- Keyboard shortcuts ---- */

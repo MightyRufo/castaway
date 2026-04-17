@@ -78,10 +78,13 @@ hls_cleanup on;
 hls_nested off;
 EOF
 
+# Always push source to /show/stream — gives us stream.m3u8 regardless of
+# whether ABR transcoding is on. If ffmpeg ABR fails, viewers can still
+# watch the source-quality stream.
+BASE_PUSH='push rtmp://127.0.0.1:1935/show/stream;'
+
 if [ "$ABR_MODE" = "off" ]; then
-  cat > "$CONF_DIR/live-relay.conf" <<'EOF'
-push rtmp://127.0.0.1:1935/show/stream;
-EOF
+  printf '%s\n' "$BASE_PUSH" > "$CONF_DIR/live-relay.conf"
   : > "$CONF_DIR/http-abr.conf"
 else
   if [ "$ABR_MODE" = "qsv" ]; then
@@ -93,14 +96,20 @@ else
     V720="-c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k -maxrate 3000k -bufsize 5000k -vf scale=1280:720"
     V1080="-c:v libx264 -preset veryfast -tune zerolatency -b:v 5500k -maxrate 6500k -bufsize 11000k -vf scale=1920:1080"
   fi
-  printf 'exec ffmpeg -hide_banner -loglevel warning %s -i rtmp://127.0.0.1:1935/live/$name %s -c:a aac -b:a 96k  -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_480p %s -c:a aac -b:a 128k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_720p %s -c:a aac -b:a 160k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_1080p;\n' \
-    "$ENC" "$V480" "$V720" "$V1080" > "$CONF_DIR/live-relay.conf"
+  # Source push first, then ffmpeg variants. If ffmpeg dies, source still
+  # works — viewers fall back to /hls/stream.m3u8.
+  {
+    printf '%s\n' "$BASE_PUSH"
+    # ffmpeg log goes to /var/log/ffmpeg-abr.log so we can debug failures.
+    printf 'exec ffmpeg -hide_banner -loglevel info %s -i rtmp://127.0.0.1:1935/live/$name %s -c:a aac -b:a 96k  -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_480p %s -c:a aac -b:a 128k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_720p %s -c:a aac -b:a 160k -ar 44100 -g 60 -keyint_min 60 -sc_threshold 0 -f flv rtmp://127.0.0.1:1935/show/stream_1080p 2>>/var/log/ffmpeg-abr.log;\n' \
+      "$ENC" "$V480" "$V720" "$V1080"
+  } > "$CONF_DIR/live-relay.conf"
   cat > "$CONF_DIR/http-abr.conf" <<'EOF'
 location = /hls/stream_master.m3u8 {
-    include /etc/nginx/conf.d/http-auth-check.conf;
     default_type application/vnd.apple.mpegurl;
     add_header Cache-Control no-cache;
     add_header Access-Control-Allow-Origin "*" always;
+    include /etc/nginx/conf.d/http-auth-check.conf;
     return 200 "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=854x480,CODECS=\"avc1.4d401e,mp4a.40.2\"\nstream_480p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2900000,RESOLUTION=1280x720,CODECS=\"avc1.4d401f,mp4a.40.2\"\nstream_720p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=6300000,RESOLUTION=1920x1080,CODECS=\"avc1.4d4028,mp4a.40.2\"\nstream_1080p.m3u8\n";
 }
 EOF

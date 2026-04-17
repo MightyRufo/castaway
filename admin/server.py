@@ -41,6 +41,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 _config_lock = threading.Lock()
 
+# Active player heartbeats: {session_id: {ip, ua, started, last_seen}}.
+# Sessions older than CLIENT_TTL with no heartbeat are evicted.
+CLIENT_TTL = 15  # seconds
+_clients: dict[str, dict[str, Any]] = {}
+_clients_lock = threading.Lock()
+
 
 def gen_key(length: int = 16) -> str:
     """URL-safe-ish stream key. Lowercase + digits, easy to type into OBS."""
@@ -182,8 +188,17 @@ def _is_authed() -> bool:
 
 @app.before_request
 def _gate() -> Any:
-    """Redirect to login for HTML, return 401 for API."""
-    open_paths = {"/login", "/login.html", "/static", "/api/auth/login", "/health"}
+    """Redirect to login for HTML, return 401 for API.
+
+    /api/heartbeat and /api/streamstate are reached via the nginx-proxied
+    viewer port, where the viewer-auth check has already been applied.
+    The admin auth check would block them, so they're explicitly open here.
+    """
+    open_paths = {
+        "/login", "/login.html", "/static",
+        "/api/auth/login", "/health",
+        "/api/heartbeat", "/api/streamstate",
+    }
     if any(request.path == p or request.path.startswith(p + "/") for p in open_paths):
         return None
     if _is_authed():
@@ -232,6 +247,29 @@ def dashboard() -> Any:
     return render_template("dashboard.html")
 
 
+def _evict_stale_clients() -> list[dict[str, Any]]:
+    """Drop clients that haven't sent a heartbeat in CLIENT_TTL seconds.
+
+    Returns the still-active list as plain dicts safe for JSON.
+    """
+    now = time.time()
+    out: list[dict[str, Any]] = []
+    with _clients_lock:
+        for sid in list(_clients):
+            c = _clients[sid]
+            if now - c["last_seen"] > CLIENT_TTL:
+                _clients.pop(sid, None)
+                continue
+            out.append({
+                "session": sid[:8],
+                "ip": c["ip"],
+                "user_agent": c["ua"],
+                "duration": int(now - c["started"]),
+                "idle": int(now - c["last_seen"]),
+            })
+    return out
+
+
 @app.route("/api/state")
 def api_state() -> Any:
     cfg = load_config()
@@ -244,8 +282,49 @@ def api_state() -> Any:
     return jsonify({
         "config": safe_cfg,
         "stats": gather_stats(),
-        "rtmp_url": "",  # filled in by client using its own host
+        "clients": _evict_stale_clients(),
     })
+
+
+# -- Open endpoints reached via the nginx proxy on the viewer port ----------
+
+@app.route("/api/streamstate")
+def api_streamstate() -> Any:
+    """Public-ish: just `{publishing: bool, title: str}`. Used by the
+    player to drive its state machine without spamming HLS requests when
+    nothing is live."""
+    cfg = load_config()
+    s = gather_stats()
+    return jsonify({
+        "publishing": s["publishing"],
+        "title": cfg.get("stream_title") or "Live Stream",
+        "abr": cfg.get("abr_mode") != "off",
+    })
+
+
+@app.route("/api/heartbeat", methods=["POST"])
+def api_heartbeat() -> Any:
+    """Player POSTs every 5s with X-Castaway-Session header. Used to count
+    active viewers in the admin dashboard."""
+    sid = request.headers.get("X-Castaway-Session", "").strip()
+    if not sid or len(sid) > 64:
+        return ("", 204)
+    now = time.time()
+    # Trust X-Forwarded-For if set (nginx adds it); else remote_addr.
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    ua = request.headers.get("User-Agent", "")[:160]
+    with _clients_lock:
+        if sid in _clients:
+            _clients[sid]["last_seen"] = now
+            _clients[sid]["ip"] = ip
+        else:
+            _clients[sid] = {
+                "ip": ip,
+                "ua": ua,
+                "started": now,
+                "last_seen": now,
+            }
+    return ("", 204)
 
 
 @app.route("/api/config", methods=["POST"])

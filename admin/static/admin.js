@@ -121,6 +121,32 @@
     const host = location.hostname;
     $('rtmp-url').textContent = `rtmp://${host}:1935/live`;
     $('watch-url').textContent = `${location.protocol}//${host}:8080/`;
+
+    // Connected viewers
+    const fmtUptime = (sec) => {
+      const m = Math.floor(sec / 60), ss = sec % 60;
+      if (m >= 60) return `${Math.floor(m/60)}h ${m%60}m`;
+      if (m >= 1)  return `${m}m ${ss}s`;
+      return `${ss}s`;
+    };
+    const list = s.clients || [];
+    $('viewers-count').textContent = list.length ? `(${list.length})` : '';
+    const box = $('viewers-list');
+    if (!list.length) {
+      box.innerHTML = '<div class="viewers-empty">No one watching right now.</div>';
+    } else {
+      box.innerHTML = list
+        .sort((a, b) => b.duration - a.duration)
+        .map(c => {
+          const ua = (c.user_agent || '').replace(/.*\((.+?)\).*/, '$1') || c.user_agent || '—';
+          return `<div class="viewer-row">
+            <span class="v-id">${c.session}</span>
+            <span class="v-ip">${c.ip || '—'}</span>
+            <span class="v-ua" title="${(c.user_agent||'').replace(/"/g,'&quot;')}">${ua}</span>
+            <span class="v-time">${fmtUptime(c.duration)}</span>
+          </div>`;
+        }).join('');
+    }
   }
 
   /* --- Event wiring --- */
