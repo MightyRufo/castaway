@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>castaway</Name>
+  <Repository>mightyrufo/castaway:latest</Repository>
+  <Registry>https://hub.docker.com/r/mightyrufo/castaway</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>Self-hosted RTMP relay. OBS pushes RTMP in on 1935, viewers watch HLS on 8080 with a connection-stats overlay (bitrate, buffer, latency, dropped frames).</Overview>
+  <Category>MediaApp:Video Network:Other</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://cdn-icons-png.flaticon.com/512/2989/2989988.png</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>Lightweight RTMP ingest + HLS playback. OBS streams to rtmp://&lt;host&gt;:1935/live/&lt;stream-key&gt; — viewers open http://&lt;host&gt;:8080/?key=&lt;stream-key&gt; and see the stream with a sidebar showing real-time connection diagnostics (resolution, video bitrate, bandwidth estimate, buffer health, latency, dropped frames, stall count).</Description>
+  <Config Name="Web port" Target="8080" Default="8080" Mode="tcp" Description="Player + stats overlay" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="RTMP port" Target="1935" Default="1935" Mode="tcp" Description="OBS ingest port" Type="Port" Display="always" Required="true" Mask="false">1935</Config>
+</Container>

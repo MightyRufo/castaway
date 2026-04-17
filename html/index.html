@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Castaway</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <img class="app-logo" src="/icon.svg" alt="Castaway">
+  <div>
+    <span class="app-title">Castaway</span>
+    <span class="app-tagline">self-hosted livestream</span>
+  </div>
+  <span class="spacer"></span>
+  <span id="live-pill" class="live-pill off">Offline</span>
+</header>
+
+<main class="main">
+  <div>
+    <div id="player-wrap" class="player-wrap">
+      <video id="video" autoplay muted playsinline></video>
+
+      <div id="offline" class="offline-overlay">
+        <img class="icon" src="/icon.svg" alt="">
+        <h2>Stream offline</h2>
+        <p id="offline-msg">Waiting for the stream to start…</p>
+      </div>
+
+      <div class="controls">
+        <div class="scrubber-row"><div id="scrub-fill" class="scrubber-fill"></div></div>
+        <div class="controls-row">
+          <button id="play-btn"  class="control-btn" title="Play/Pause (Space)"></button>
+          <div class="volume-wrap">
+            <button id="mute-btn" class="control-btn" title="Mute (M)"></button>
+            <div class="volume-slider">
+              <input type="range" id="vol-slider" min="0" max="1" step="0.01" value="1">
+            </div>
+          </div>
+          <button id="live-btn" class="live-jump synced" title="Jump to live (L)">Live</button>
+          <span class="spacer"></span>
+          <button id="pip-btn" class="control-btn" title="Picture-in-picture"></button>
+          <button id="fs-btn"  class="control-btn" title="Fullscreen (F)"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="channel-bar">
+      <label for="channel-input">Channel</label>
+      <input id="channel-input" type="text" placeholder="stream-key" autocomplete="off">
+      <span class="ingest" id="ingest-url">rtmp://host:1935/live/key</span>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div id="stats-card" class="card">
+      <h3>Connection
+        <span id="stats-toggle" class="toggle">Hide</span>
+      </h3>
+      <div class="stat-row"><span class="label">Resolution</span>     <span id="s-res"   class="value">—</span></div>
+      <div class="stat-row"><span class="label">Video bitrate</span>  <span id="s-vbr"   class="value">—</span></div>
+      <div class="stat-row"><span class="label">Bandwidth est.</span> <span id="s-bw"    class="value">—</span></div>
+      <div class="stat-row"><span class="label">Buffer</span>         <span id="s-buf"   class="value">—</span></div>
+      <div class="stat-row"><span class="label">Latency</span>        <span id="s-lat"   class="value">—</span></div>
+      <div class="stat-row"><span class="label">Dropped frames</span> <span id="s-drop"  class="value">—</span></div>
+      <div class="stat-row"><span class="label">Stalls</span>         <span id="s-stall" class="value">0</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Share</h3>
+      <div class="stat-row"><span class="label">Watch URL</span></div>
+      <div style="font-family:ui-monospace,monospace; font-size:12px; color:var(--text-dim); user-select:all; word-break:break-all;" id="watch-url"></div>
+    </div>
+
+    <div class="card">
+      <h3>Shortcuts</h3>
+      <div class="stat-row"><span class="label">Play/Pause</span><span class="value">Space</span></div>
+      <div class="stat-row"><span class="label">Mute</span><span class="value">M</span></div>
+      <div class="stat-row"><span class="label">Fullscreen</span><span class="value">F</span></div>
+      <div class="stat-row"><span class="label">Jump to live</span><span class="value">L</span></div>
+      <div class="stat-row"><span class="label">Toggle stats</span><span class="value">I</span></div>
+    </div>
+  </aside>
+</main>
+
+<footer class="app-footer">
+  Castaway · self-hosted RTMP relay with viewer diagnostics
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script src="/player.js"></script>
+</body>
+</html>
