@@ -6,7 +6,12 @@ LABEL org.opencontainers.image.description="Self-hosted RTMP streaming with view
 LABEL org.opencontainers.image.source="https://github.com/MightyRufo/castaway"
 LABEL org.opencontainers.image.licenses="MIT"
 
-RUN apk add --no-cache nginx nginx-mod-rtmp ca-certificates tzdata \
+RUN apk add --no-cache \
+        nginx nginx-mod-rtmp \
+        ffmpeg \
+        intel-media-driver libva-intel-driver mesa-va-gallium \
+        apache2-utils \
+        ca-certificates tzdata \
     && mkdir -p /var/lib/nginx/hls /var/log/nginx /run/nginx /etc/nginx/conf.d \
     && rm -rf /etc/nginx/http.d/default.conf
 
@@ -21,8 +26,19 @@ EXPOSE 1935 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD wget -q --spider http://127.0.0.1:8080/health || exit 1
 
-# STREAM_KEYS — comma-separated allowed stream keys. Empty = no auth.
+# STREAM_KEYS — comma-separated allowed stream keys. Empty = no publish auth.
 ENV STREAM_KEYS=""
+
+# VIEWER_PASSWORD — protect web UI + HLS with HTTP basic auth. Empty = open.
+ENV VIEWER_PASSWORD=""
+ENV VIEWER_USER="viewer"
+
+# ABR_MODE — auto | qsv | cpu | off
+#   auto = QSV if /dev/dri exists, else off (single bitrate)
+#   qsv  = force Intel Quick Sync (requires /dev/dri/renderD128)
+#   cpu  = force libx264 (heavy on CPU; not recommended)
+#   off  = no transcode, single-bitrate passthrough
+ENV ABR_MODE="auto"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
