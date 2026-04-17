@@ -7,23 +7,16 @@
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support/>
   <Project>https://github.com/MightyRufo/castaway</Project>
-  <Overview>Self-hosted single-stream RTMP relay. OBS pushes to a private key, viewers watch in a fullscreen HTML5 player with viewer-side connection diagnostics. Optional Intel QSV ABR transcoding (480p/720p/1080p), optional in-page password gate.</Overview>
+  <Overview>Self-hosted single-stream RTMP relay with admin dashboard and viewer-side connection diagnostics. Passes the OBS source through unchanged — viewers see exactly what you publish.</Overview>
   <Category>MediaApp:Video Network:Other</Category>
-  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
-  <TemplateURL/>
+  <WebUI>http://[IP]:[PORT:7401]/</WebUI>
   <Icon>https://raw.githubusercontent.com/MightyRufo/castaway/main/html/icon.svg</Icon>
-  <ExtraParams>--restart unless-stopped</ExtraParams>
-  <Description>OBS streams to rtmp://&lt;host&gt;:1935/live/&lt;STREAM_KEY&gt;. The key is private — viewers never see it. Open http://&lt;host&gt;:8080/ for the fullscreen player. STREAM_TITLE sets the displayed name. Optional VIEWER_PASSWORD adds a custom in-page login. ABR_MODE=auto + /dev/dri device passthrough enables hardware transcoding via Intel Quick Sync.</Description>
-
-  <Config Name="Web port" Target="8080" Default="8080" Mode="tcp" Description="Player UI + HLS delivery" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="RTMP port" Target="1935" Default="1935" Mode="tcp" Description="OBS ingest port" Type="Port" Display="always" Required="true" Mask="false">1935</Config>
-
-  <Config Name="Stream key" Target="STREAM_KEY" Default="" Mode="" Description="Private OBS publish password. Generate something random and unguessable. NEVER appears in URLs or the UI. Leave empty to allow anyone to publish (NOT recommended)." Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="Stream title" Target="STREAM_TITLE" Default="Live Stream" Mode="" Description="Displayed name shown to viewers above the player." Type="Variable" Display="always" Required="false" Mask="false">Live Stream</Config>
-  <Config Name="Viewer password" Target="VIEWER_PASSWORD" Default="" Mode="" Description="If set, viewers must enter this password (in-page login form) to load the player. Leave empty for open access." Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="ABR mode" Target="ABR_MODE" Default="auto" Mode="" Description="auto = QSV if /dev/dri is mounted, else off. Options: auto, qsv, cpu, off." Type="Variable" Display="advanced" Required="false" Mask="false">auto</Config>
-
-  <Config Name="Intel GPU (for QSV)" Target="/dev/dri" Default="/dev/dri" Mode="" Description="Mount your Intel iGPU/Arc GPU for hardware-accelerated ABR transcoding. Remove if you don't have one — ABR will auto-disable." Type="Device" Display="advanced" Required="false" Mask="false">/dev/dri</Config>
+  <ExtraParams>--restart unless-stopped --tmpfs=/var/lib/nginx/hls:rw,size=64m</ExtraParams>
+  <Description>Castaway 0.6.0 — admin dashboard at port 7401 (everything is set there), viewer at port 8080, OBS ingest at port 1935. HLS files live in tmpfs (RAM, 64M cap) so SSDs don't get hammered. Mount /var/lib/castaway as a volume so settings persist.</Description>
+  <Config Name="Admin port" Target="7401" Default="7401" Mode="tcp" Description="Admin dashboard" Type="Port" Display="always" Required="true" Mask="false">7401</Config>
+  <Config Name="Viewer port" Target="8080" Default="8080" Mode="tcp" Description="Public player" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="RTMP port" Target="1935" Default="1935" Mode="tcp" Description="OBS ingest" Type="Port" Display="always" Required="true" Mask="false">1935</Config>
+  <Config Name="Admin password" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Required. Sets the admin dashboard password. Without it the dashboard is open to anyone who can reach the port." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Config volume" Target="/var/lib/castaway" Default="/mnt/user/appdata/castaway" Mode="rw" Description="Persists stream key, title, viewer password across container recreates." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/castaway</Config>
 </Container>

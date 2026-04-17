@@ -110,7 +110,6 @@
     // Config inputs (only update if user not actively editing)
     if (document.activeElement.id !== 'cfg-title') $('cfg-title').value = cfg.stream_title || '';
     $('cfg-key').value = cfg.stream_key || '';
-    if (document.activeElement.id !== 'cfg-abr') $('cfg-abr').value = cfg.abr_mode || 'auto';
     $('viewer-pw-status').textContent = cfg.viewer_password_set
       ? 'Set — viewers must enter a password to watch.'
       : 'Empty — viewers can watch without a password.';
@@ -149,7 +148,6 @@
       const field = btn.dataset.save;
       let value;
       if (field === 'stream_title') value = $('cfg-title').value;
-      else if (field === 'abr_mode') value = $('cfg-abr').value;
       else if (field === 'viewer_password') value = $('cfg-viewer-pw').value;
       const r = await postConfig({ [field]: value });
       if (r.ok) {

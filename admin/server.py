@@ -36,7 +36,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "stream_key": "",
     "stream_title": "Live Stream",
     "viewer_password": "",
-    "abr_mode": "auto",
 }
 
 _config_lock = threading.Lock()
@@ -287,7 +286,6 @@ def api_state() -> Any:
         "stream_key": cfg["stream_key"],  # admin can see it
         "stream_title": cfg["stream_title"],
         "viewer_password_set": bool(cfg.get("viewer_password")),
-        "abr_mode": cfg["abr_mode"],
     }
     return jsonify({
         "config": safe_cfg,
@@ -308,7 +306,6 @@ def api_streamstate() -> Any:
     return jsonify({
         "publishing": s["publishing"],
         "title": cfg.get("stream_title") or "Live Stream",
-        "abr": cfg.get("abr_mode") != "off",
     })
 
 
@@ -342,7 +339,7 @@ def api_config_set() -> Any:
     body = request.get_json(silent=True) or {}
     cfg = load_config()
     changed = []
-    for field in ("stream_title", "abr_mode"):
+    for field in ("stream_title",):
         if field in body and isinstance(body[field], str):
             if body[field] != cfg[field]:
                 cfg[field] = body[field]

@@ -2,14 +2,12 @@
 FROM alpine:3.20
 
 LABEL org.opencontainers.image.title="Castaway"
-LABEL org.opencontainers.image.description="Self-hosted single-stream RTMP relay with admin dashboard, viewer-side diagnostics, and Intel QSV adaptive bitrate transcoding."
+LABEL org.opencontainers.image.description="Self-hosted single-stream RTMP relay with admin dashboard and viewer-side diagnostics."
 LABEL org.opencontainers.image.source="https://github.com/MightyRufo/castaway"
 LABEL org.opencontainers.image.licenses="MIT"
 
 RUN apk add --no-cache \
         nginx nginx-mod-rtmp \
-        ffmpeg \
-        intel-media-driver libva-intel-driver mesa-va-gallium \
         python3 py3-flask py3-psutil \
         ca-certificates tzdata \
     && mkdir -p /var/lib/nginx/hls /var/lib/castaway /var/log/nginx /run/nginx /etc/nginx/conf.d /opt/castaway \
@@ -41,7 +39,6 @@ ENV ADMIN_PORT="7401"
 ENV STREAM_KEY=""
 ENV STREAM_TITLE="Live Stream"
 ENV VIEWER_PASSWORD=""
-ENV ABR_MODE="auto"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

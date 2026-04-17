@@ -4,8 +4,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  const HLS_SINGLE = '/hls/stream.m3u8';
-  const HLS_MASTER = '/hls/stream_master.m3u8';
+  const HLS_URL = '/hls/stream.m3u8';
   const STATE_URL  = '/api/streamstate';
   const HEARTBEAT_URL = '/api/heartbeat';
 
@@ -164,20 +163,17 @@
 
   /* ---- HLS lifecycle (state-machine driven by polling) ---- */
   let hls = null;
-  let triedFallback = false;
 
   function teardownHls() {
     if (hls) { try { hls.destroy(); } catch {} ; hls = null; }
-    triedFallback = false;
     qualitySelect.style.display = 'none';
   }
 
-  function initHls(src) {
+  function initHls() {
     teardownHls();
     if (!window.Hls || !Hls.isSupported()) {
-      // Native Safari path
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = src;
+        video.src = HLS_URL;
         video.play().catch(() => {});
       } else {
         setOffline(true, 'Your browser does not support HLS playback.');
@@ -193,30 +189,17 @@
       fragLoadingMaxRetry: 2,
       xhrSetup: (xhr) => { xhr.withCredentials = true; },
     });
-    hls.loadSource(src);
+    hls.loadSource(HLS_URL);
     hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
       setOffline(false);
       setPill(true);
-      if (data.levels && data.levels.length > 1) {
-        qualitySelect.innerHTML = '<option value="-1">Auto</option>' +
-          data.levels.map((lvl, i) => `<option value="${i}">${lvl.height}p</option>`).join('');
-        qualitySelect.style.display = '';
-      } else {
-        qualitySelect.style.display = 'none';
-      }
       video.play().catch(() => {});
     });
     hls.on(Hls.Events.ERROR, (_, data) => {
       if (!data.fatal) return;
-      // First fatal? If we're on the master, fall back to single-bitrate.
-      if (!triedFallback && src === HLS_MASTER) {
-        triedFallback = true;
-        initHls(HLS_SINGLE);
-        return;
-      }
-      // Otherwise: tear down and let the polling loop bring us back when
-      // publishing flips true again. No reconnect-loop blink.
+      // Tear down and let the polling loop bring us back when publishing
+      // flips true again. No reconnect-loop blink.
       teardownHls();
     });
   }
