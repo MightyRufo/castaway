@@ -26,8 +26,11 @@ EXPOSE 1935 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD wget -q --spider http://127.0.0.1:8080/health || exit 1
 
-# STREAM_KEYS — comma-separated allowed stream keys. Empty = no publish auth.
-ENV STREAM_KEYS=""
+# STREAM_KEY — private OBS publish password. Empty = no publish auth.
+ENV STREAM_KEY=""
+
+# STREAM_TITLE — display name shown to viewers.
+ENV STREAM_TITLE="Live Stream"
 
 # VIEWER_PASSWORD — protect web UI + HLS with an in-page password. Empty = open.
 ENV VIEWER_PASSWORD=""

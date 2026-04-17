@@ -1,13 +1,12 @@
-/* Castaway player — fullscreen single-stream view, minimal overlay,
+/* Castaway player — single-stream, fullscreen, minimal overlay,
    slide-out stats drawer, ABR quality selector. */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const params = new URLSearchParams(location.search);
-  const channel = (params.get('c') || params.get('key') || 'live').replace(/[^a-zA-Z0-9_-]/g, '');
 
-  // Pretty title from slug: "apex-legends" → "Apex Legends"
-  const titleFromSlug = (slug) =>
-    slug.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  // Single-stream model — channel name is fixed internally. Viewers never
+  // see or set it. The OBS publish key is private and lives only on the server.
+  const HLS_SINGLE = '/hls/stream.m3u8';
+  const HLS_MASTER = '/hls/stream_master.m3u8';
 
   const stage   = $('stage');
   const video   = $('video');
@@ -26,9 +25,13 @@
   const statsBtn = $('stats-btn');
   const qualitySelect = $('quality-select');
 
-  document.title = `${titleFromSlug(channel)} · Castaway`;
-  titleText.textContent = titleFromSlug(channel);
-  $('share-url').textContent = location.href;
+  // Pull title from the server config endpoint, fall back to "Live Stream".
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    if (cfg && cfg.title) {
+      titleText.textContent = cfg.title;
+      document.title = `${cfg.title} · Castaway`;
+    }
+  }).catch(() => {});
 
   /* ---- Helpers ---- */
   const setPill = (live) => {
@@ -41,6 +44,7 @@
   };
   const setVal = (id, v, cls) => {
     const el = $(id);
+    if (!el) return;
     el.textContent = v;
     el.classList.remove('good','warn','bad');
     if (cls) el.classList.add(cls);
@@ -82,24 +86,20 @@
     if (document.fullscreenElement) document.exitFullscreen();
     else stage.requestFullscreen?.();
   };
-
   pipBtn.onclick = async () => {
     try {
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
       else await video.requestPictureInPicture();
     } catch (_) {}
   };
-
   liveBtn.onclick = () => {
     if (hls && hls.liveSyncPosition !== undefined) {
       video.currentTime = hls.liveSyncPosition;
       video.play().catch(() => {});
     }
   };
-
   statsBtn.onclick = () => drawer.classList.toggle('open');
   drawerCloseBtn.onclick = () => drawer.classList.remove('open');
-
   qualitySelect.onchange = () => {
     if (!hls) return;
     hls.currentLevel = parseInt(qualitySelect.value, 10);
@@ -160,27 +160,25 @@
     }
     setVal('s-stall', stallCount, stallCount === 0 ? 'good' : stallCount < 3 ? 'warn' : 'bad');
 
-    // Live-edge sync indicator
     if (hls.liveSyncPosition !== undefined) {
       const drift = hls.liveSyncPosition - video.currentTime;
       liveBtn.classList.toggle('synced', drift < 3);
     }
   };
 
-  /* ---- HLS lifecycle (try ABR master first, fallback to single) ---- */
+  /* ---- HLS lifecycle ---- */
   let hls;
   let reconnectTimer;
   let consecutiveErrors = 0;
 
   const tryLoad = async () => {
-    setOffline(true, `<span class="reconnect-dot"></span>Connecting to <strong>${titleFromSlug(channel)}</strong>…`);
+    setOffline(true, '<span class="reconnect-dot"></span>Connecting…');
 
-    // Detect whether the server is doing ABR by HEAD-checking the master playlist.
-    // If 200, prefer master.m3u8 (multi-bitrate); else fall back to <channel>.m3u8.
-    let src = `/hls/${channel}.m3u8`;
+    // ABR master playlist if the server has it, otherwise single bitrate.
+    let src = HLS_SINGLE;
     try {
-      const r = await fetch(`/hls/${channel}_master.m3u8`, { method: 'HEAD' });
-      if (r.ok) src = `/hls/${channel}_master.m3u8`;
+      const r = await fetch(HLS_MASTER, { method: 'HEAD' });
+      if (r.ok) src = HLS_MASTER;
     } catch (_) {}
 
     if (window.Hls && Hls.isSupported()) {
@@ -191,6 +189,7 @@
         manifestLoadingMaxRetry: 0,
         levelLoadingMaxRetry: 0,
         fragLoadingMaxRetry: 1,
+        xhrSetup: (xhr) => { xhr.withCredentials = true; },  // send cookie on HLS XHRs
       });
       hls.loadSource(src);
       hls.attachMedia(video);
@@ -199,7 +198,6 @@
         consecutiveErrors = 0;
         setOffline(false);
         setPill(true);
-        // Build quality dropdown if we have multiple levels
         if (data.levels && data.levels.length > 1) {
           qualitySelect.innerHTML = '<option value="-1">Auto</option>' +
             data.levels.map((lvl, i) =>

@@ -2,34 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="0; url=/watch.html">
 <title>Castaway</title>
-<link rel="icon" type="image/svg+xml" href="/icon.svg">
-<link rel="stylesheet" href="/style.css">
 </head>
-<body class="lobby">
-<div class="lobby-wrap">
-  <div class="lobby-header">
-    <img src="/icon.svg" alt="">
-    <div>
-      <h1>Castaway</h1>
-      <span>self-hosted livestream</span>
-    </div>
-  </div>
-
-  <div id="lobby-content"></div>
-</div>
-
-<script>
-  // Backwards compat — old links used /?c=<key>; redirect those to /watch.html.
-  (() => {
-    const p = new URLSearchParams(location.search);
-    if (p.get('c') || p.get('key')) {
-      const k = p.get('c') || p.get('key');
-      location.replace('/watch.html?c=' + encodeURIComponent(k));
-    }
-  })();
-</script>
-<script src="/lobby.js"></script>
-</body>
+<body><script>location.replace('/watch.html');</script></body>
 </html>
