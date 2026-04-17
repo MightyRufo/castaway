@@ -165,33 +165,6 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 
-.live-jump {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--live);
-  color: #fff;
-}
-.live-jump.synced {
-  background: rgba(255,255,255,0.12);
-  color: #aaa;
-}
-
-.quality-select {
-  background: rgba(255,255,255,0.12);
-  border: none;
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
 /* Stats drawer — slides in from the right */
 .drawer {
   position: absolute;

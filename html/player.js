@@ -18,7 +18,6 @@
   const muteBtn = $('mute-btn');
   const fsBtn   = $('fs-btn');
   const pipBtn  = $('pip-btn');
-  const liveBtn = $('live-btn');
   const volSlider = $('vol-slider');
   const offline = $('offline');
   const offlineMsg = $('offline-msg');
@@ -84,12 +83,6 @@
       else await video.requestPictureInPicture();
     } catch (_) {}
   };
-  liveBtn.onclick = () => {
-    if (hls && hls.liveSyncPosition !== undefined) {
-      video.currentTime = hls.liveSyncPosition;
-      video.play().catch(() => {});
-    }
-  };
   statsBtn.onclick = () => drawer.classList.toggle('open');
   drawerCloseBtn.onclick = () => drawer.classList.remove('open');
 
@@ -151,11 +144,6 @@
         q.droppedVideoFrames === 0 ? 'good' : q.droppedVideoFrames < 30 ? 'warn' : 'bad');
     }
     setVal('s-stall', stallCount, stallCount === 0 ? 'good' : stallCount < 3 ? 'warn' : 'bad');
-
-    if (hls.liveSyncPosition !== undefined) {
-      const drift = hls.liveSyncPosition - video.currentTime;
-      liveBtn.classList.toggle('synced', drift < 3);
-    }
   };
 
   /* ---- HLS lifecycle (state-machine driven by polling) ---- */
