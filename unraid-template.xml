@@ -13,7 +13,7 @@
   <WebUI>http://[IP]:[PORT:7401]/</WebUI>
   <Icon>https://raw.githubusercontent.com/MightyRufo/castaway/main/html/icon.svg</Icon>
   <ExtraParams>--restart unless-stopped --tmpfs=/var/lib/nginx/hls:rw,size=1g</ExtraParams>
-  <Description>Castaway 0.6.7 — admin dashboard at port 7401 (everything is set there), viewer at port 8080, OBS ingest at port 1935. HLS files live in tmpfs (RAM, 1GB cap) so SSDs don't get hammered, supports up to 4K streaming. Mount /var/lib/castaway as a volume so settings persist.</Description>
+  <Description>Castaway 0.6.8 — admin dashboard at port 7401 (everything is set there), viewer at port 8080, OBS ingest at port 1935. HLS files live in tmpfs (RAM, 1GB cap) so SSDs don't get hammered, supports up to 4K streaming. Mount /var/lib/castaway as a volume so settings persist.</Description>
   <Config Name="Admin port" Target="7401" Default="7401" Mode="tcp" Description="Admin dashboard" Type="Port" Display="always" Required="true" Mask="false">7401</Config>
   <Config Name="Viewer port" Target="8080" Default="8080" Mode="tcp" Description="Public player" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="RTMP port" Target="1935" Default="1935" Mode="tcp" Description="OBS ingest" Type="Port" Display="always" Required="true" Mask="false">1935</Config>
