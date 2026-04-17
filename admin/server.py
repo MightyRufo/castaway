@@ -106,8 +106,10 @@ def gather_stats() -> dict[str, Any]:
 
     server_uptime = int(_stat_text(root, "uptime", "0") or "0") // 1000
 
-    # Walk applications -> live -> streams. Variants (stream_480p etc.) are
-    # transcode outputs, not the source — count them separately.
+    # The relay (push or ffmpeg-exec) makes the source stream show up under
+    # the `show` application, not `live`. So /show/stream is the source of
+    # truth for whether something is being published. Variants (stream_480p
+    # etc.) live alongside it.
     publishing = False
     source_bw_in = 0
     source_bytes_in = 0
@@ -116,7 +118,7 @@ def gather_stats() -> dict[str, Any]:
     if root is not None:
         for app in root.iter("application"):
             name = _stat_text(app, "name")
-            if name not in ("live", "show"):
+            if name != "show":
                 continue
             live_el = app.find("live")
             if live_el is None:
@@ -127,22 +129,20 @@ def gather_stats() -> dict[str, Any]:
                 bytes_in = int(_stat_text(stream, "bytes_in", "0") or 0)
                 nclients = int(_stat_text(stream, "nclients", "0") or 0)
                 pub = stream.find("publishing")
-                if name == "live" and sname:
+
+                if sname == "stream":
                     if pub is not None:
                         publishing = True
                     source_bw_in = bw_in
                     source_bytes_in = bytes_in
-                elif name == "show":
-                    is_variant = sname.startswith("stream_")
-                    # The base 'stream' channel carries viewers.
-                    if sname == "stream":
-                        viewers += max(0, nclients - 1)  # subtract publisher
-                    if is_variant:
-                        variants.append({
-                            "name": sname,
-                            "bw_in": bw_in,
-                            "viewers": max(0, nclients - 1),
-                        })
+                    # Subtract 1 for the publisher itself.
+                    viewers = max(0, nclients - 1)
+                elif sname.startswith("stream_"):
+                    variants.append({
+                        "name": sname,
+                        "bw_in": bw_in,
+                        "viewers": max(0, nclients - 1),
+                    })
 
     cpu = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
