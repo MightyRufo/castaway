@@ -9,9 +9,12 @@ LABEL org.opencontainers.image.licenses="MIT"
 RUN apk add --no-cache \
         nginx nginx-mod-rtmp \
         python3 py3-flask py3-psutil \
+        su-exec \
         ca-certificates tzdata \
     && mkdir -p /var/lib/nginx/hls /var/lib/castaway /var/log/nginx /run/nginx /etc/nginx/conf.d /opt/castaway \
-    && rm -rf /etc/nginx/http.d/default.conf
+    && rm -rf /etc/nginx/http.d/default.conf \
+    && addgroup -S -g 1000 castaway \
+    && adduser  -S -G castaway -u 1000 -h /var/lib/castaway castaway
 
 COPY nginx/nginx.conf       /etc/nginx/nginx.conf
 COPY entrypoint.sh          /usr/local/bin/entrypoint.sh
@@ -19,7 +22,11 @@ COPY regen.sh               /usr/local/bin/regen.sh
 COPY html/                  /var/www/html/
 COPY admin/                 /opt/castaway/
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/regen.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/regen.sh \
+    && chown -R castaway:castaway \
+        /var/lib/nginx /var/lib/castaway \
+        /var/log/nginx /run/nginx \
+        /etc/nginx/conf.d /opt/castaway
 
 EXPOSE 1935 8080 7401
 

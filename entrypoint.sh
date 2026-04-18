@@ -1,5 +1,7 @@
 #!/bin/sh
 # Castaway entrypoint.
+# - First runs as root to fix up perms on volume + tmpfs mounts.
+# - Then re-execs as the unprivileged `castaway` user.
 # - Seeds /var/lib/castaway/config.json on first boot if missing.
 # - Generates nginx conf.d snippets via /usr/local/bin/regen.sh.
 # - Starts the admin server (Python/Flask) in the background on $ADMIN_PORT.
@@ -8,6 +10,15 @@ set -eu
 
 CONFIG_FILE="${CASTAWAY_CONFIG:-/var/lib/castaway/config.json}"
 ADMIN_PORT="${ADMIN_PORT:-7401}"
+
+# First pass: running as root. tmpfs and bind-mount volumes come up owned by
+# root, so chown them to castaway here, then re-exec as castaway for the
+# rest of startup. nginx master, workers, and Flask all run as castaway.
+if [ "$(id -u)" = "0" ]; then
+  chown -R castaway:castaway /var/lib/castaway /var/lib/nginx/hls 2>/dev/null || true
+  chmod 700 /var/lib/castaway 2>/dev/null || true
+  exec su-exec castaway "$0" "$@"
+fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
   mkdir -p "$(dirname "$CONFIG_FILE")"
