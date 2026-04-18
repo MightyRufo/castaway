@@ -161,7 +161,13 @@
 
   function teardownHls() {
     if (hls) { try { hls.destroy(); } catch {} ; hls = null; }
+    video.classList.remove('live');
   }
+
+  // Fade the video element in only when frames are actually rendering, so
+  // we don't show a black flash between attach and first paint.
+  video.addEventListener('playing', () => video.classList.add('live'));
+  video.addEventListener('emptied', () => video.classList.remove('live'));
 
   function initHls() {
     teardownHls();

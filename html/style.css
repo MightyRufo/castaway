@@ -46,7 +46,10 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   object-fit: contain;
   background: #000;
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
 }
+.stage video.live { opacity: 1; }
 
 /* Top bar — title + live pill, fades after 3s */
 .top-bar {
@@ -220,11 +223,11 @@ a { color: inherit; text-decoration: none; }
   padding: 6px 0;
 }
 
-/* Offline overlay */
+/* Offline overlay — fades in/out instead of snapping */
 .offline {
   position: absolute;
   inset: 0;
-  display: none;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -233,8 +236,11 @@ a { color: inherit; text-decoration: none; }
   padding: 32px;
   gap: 12px;
   z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease-in-out;
 }
-.offline.visible { display: flex; }
+.offline.visible { opacity: 1; pointer-events: auto; }
 .offline img { width: 96px; opacity: 0.7; }
 .offline h2 { font-size: 22px; font-weight: 600; }
 .offline p { color: #888; max-width: 380px; }
