@@ -4,10 +4,6 @@
 
 Self-hosted single-stream RTMP relay for Unraid (or any Docker host). OBS pushes to a private key, viewers watch a fullscreen HTML5 player with a real-time **viewer-side** connection diagnostics drawer (bitrate, buffer, latency, dropped frames, stalls). One container = one stream.
 
-## Why
-
-When viewers say "the stream is laggy" you can immediately see whether it's their connection or yours. The stats panel reads `hls.js` and `HTMLVideoElement.getVideoPlaybackQuality()` directly — it reflects exactly what the viewer's browser sees, not the server.
-
 ## Features
 
 - **Single-stream model** — one container, one stream. The OBS publish key is private and never appears in URLs or UI.
