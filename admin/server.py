@@ -68,6 +68,47 @@ _login_lock = threading.Lock()
 LOGIN_BACKOFF_BASE = 2.0       # 2^n second backoff
 LOGIN_BACKOFF_RESET = 600       # seconds — reset counter after no failures
 
+_start_time = time.time()
+
+# Stream session tracking.
+_stream_lock = threading.Lock()
+_last_publishing = False
+_publish_started_at: float | None = None
+_peak_viewers: int = 0
+
+# Network outbound bandwidth tracking.
+_net_lock = threading.Lock()
+_net_last: dict[str, float] = {"bytes_sent": 0.0, "t": 0.0}
+
+
+def _net_bw_out_bps() -> float:
+    with _net_lock:
+        try:
+            nio = psutil.net_io_counters()
+            now = time.time()
+            dt = now - _net_last["t"]
+            bw = (nio.bytes_sent - _net_last["bytes_sent"]) / dt if dt > 0.5 and _net_last["t"] > 0 else 0.0
+            _net_last["bytes_sent"] = nio.bytes_sent
+            _net_last["t"] = now
+            return max(0.0, bw * 8)  # bits/sec
+        except Exception:
+            return 0.0
+
+SESSION_LOG_PATH = Path("/var/lib/castaway/viewer_sessions.jsonl")
+
+
+def _log_session(sid: str, ip: str, ua: str, duration: int) -> None:
+    try:
+        entry = json.dumps({
+            "t": int(time.time()), "session": sid[:8],
+            "ip": ip, "ua": ua, "duration": duration,
+        })
+        SESSION_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(SESSION_LOG_PATH, "a") as f:
+            f.write(entry + "\n")
+    except Exception:
+        pass
+
 
 def gen_key(length: int = 16) -> str:
     """URL-safe-ish stream key. Lowercase + digits, easy to type into OBS."""
@@ -137,7 +178,7 @@ def _stat_text(node: ET.Element | None, path: str, default: str = "") -> str:
 
 def gather_stats() -> dict[str, Any]:
     root = _fetch_stat_xml()
-    server_uptime = int(_stat_text(root, "uptime", "0") or "0") // 1000
+    server_uptime = int(time.time() - _start_time)
 
     publishing = False
     source_bw_in = 0
@@ -168,6 +209,25 @@ def gather_stats() -> dict[str, Any]:
     cpu = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage("/var/lib/nginx/hls")
+    net_bw_out = _net_bw_out_bps()
+
+    # Track stream start time and peak viewers.
+    global _last_publishing, _publish_started_at, _peak_viewers
+    with _stream_lock:
+        if publishing and not _last_publishing:
+            _publish_started_at = time.time()
+            _peak_viewers = 0
+        elif not publishing:
+            _publish_started_at = None
+        if publishing:
+            with _clients_lock:
+                now_c = time.time()
+                curr = sum(1 for c in _clients.values() if now_c - c["last_seen"] <= CLIENT_TTL)
+            if curr > _peak_viewers:
+                _peak_viewers = curr
+        _last_publishing = publishing
+        stream_started_at = _publish_started_at
+        peak_viewers = _peak_viewers
 
     return {
         "publishing": publishing,
@@ -175,6 +235,8 @@ def gather_stats() -> dict[str, Any]:
         "source_bw_in": source_bw_in,
         "source_bytes_in": source_bytes_in,
         "server_uptime": server_uptime,
+        "stream_started_at": stream_started_at,
+        "peak_viewers": peak_viewers,
         "system": {
             "cpu_percent": cpu,
             "mem_percent": mem.percent,
@@ -182,6 +244,7 @@ def gather_stats() -> dict[str, Any]:
             "mem_total_mb": int(mem.total / 1024 / 1024),
             "disk_used_mb": int(disk.used / 1024 / 1024),
             "disk_total_mb": int(disk.total / 1024 / 1024),
+            "net_bw_out_bps": net_bw_out,
         },
     }
 
@@ -334,6 +397,7 @@ def api_login() -> Any:
     resp.set_cookie(
         "castaway_admin", session,
         httponly=True, samesite="Strict", max_age=30 * 24 * 3600, path="/",
+        secure=request.headers.get("X-Forwarded-Proto") == "https",
     )
     return resp
 
@@ -438,6 +502,7 @@ def viewer_login() -> Any:
     resp.set_cookie(
         "castaway_auth", token,
         httponly=True, samesite="Strict", max_age=30 * 24 * 3600, path="/",
+        secure=request.headers.get("X-Forwarded-Proto") == "https",
     )
     return resp
 
@@ -453,10 +518,12 @@ def dashboard() -> Any:
 def _evict_stale_clients() -> list[dict[str, Any]]:
     now = time.time()
     out: list[dict[str, Any]] = []
+    evicted: list[tuple[str, dict[str, Any]]] = []
     with _clients_lock:
         for sid in list(_clients):
             c = _clients[sid]
             if now - c["last_seen"] > CLIENT_TTL:
+                evicted.append((sid, dict(c)))
                 _clients.pop(sid, None)
                 continue
             out.append({
@@ -465,7 +532,10 @@ def _evict_stale_clients() -> list[dict[str, Any]]:
                 "user_agent": c["ua"],
                 "duration": int(now - c["started"]),
                 "idle": int(now - c["last_seen"]),
+                "ping_ms": c.get("ping_ms"),
             })
+    for sid, c in evicted:
+        _log_session(sid, c["ip"], c["ua"], int(now - c["started"]))
     return out
 
 
@@ -496,6 +566,11 @@ def api_streamstate() -> Any:
     })
 
 
+@app.route("/api/ping")
+def api_ping() -> Any:
+    return ("", 204)
+
+
 @app.route("/api/heartbeat", methods=["POST"])
 def api_heartbeat() -> Any:
     sid = request.headers.get("X-Castaway-Session", "").strip()
@@ -506,12 +581,21 @@ def api_heartbeat() -> Any:
     xff = request.headers.get("X-Forwarded-For", "")
     ip = (xff.split(",")[0].strip() if xff and _trusted_loopback() else request.remote_addr) or ""
     ua = request.headers.get("User-Agent", "")[:160]
+    body = request.get_json(silent=True) or {}
+    ping_ms = body.get("ping_ms")
+    if ping_ms is not None:
+        try:
+            ping_ms = int(ping_ms)
+        except (ValueError, TypeError):
+            ping_ms = None
     with _clients_lock:
         if sid in _clients:
             _clients[sid]["last_seen"] = now
             _clients[sid]["ip"] = ip
+            if ping_ms is not None:
+                _clients[sid]["ping_ms"] = ping_ms
         else:
-            _clients[sid] = {"ip": ip, "ua": ua, "started": now, "last_seen": now}
+            _clients[sid] = {"ip": ip, "ua": ua, "started": now, "last_seen": now, "ping_ms": ping_ms}
     return ("", 204)
 
 
@@ -545,6 +629,25 @@ def api_config_set() -> Any:
         if not ok:
             return jsonify({"ok": False, "error": msg, "changed": changed}), 500
     return jsonify({"ok": True, "changed": changed})
+
+
+@app.route("/api/sessions")
+def api_sessions() -> Any:
+    """Return last N completed viewer sessions from the log file."""
+    sessions: list[dict[str, Any]] = []
+    try:
+        if SESSION_LOG_PATH.exists():
+            lines = SESSION_LOG_PATH.read_text().splitlines()
+            for line in reversed(lines[-200:]):
+                try:
+                    sessions.append(json.loads(line))
+                    if len(sessions) >= 100:
+                        break
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return jsonify({"sessions": sessions})
 
 
 @app.route("/api/key/regenerate", methods=["POST"])

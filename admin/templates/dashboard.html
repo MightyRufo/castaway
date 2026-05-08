@@ -9,96 +9,193 @@
 </head>
 <body>
 
-<header class="topbar">
-  <img class="logo" src="/static/icon.svg" alt="">
-  <h1>Castaway <span class="muted">Admin</span></h1>
-  <span class="spacer"></span>
-  <span id="status-pill" class="pill off">Idle</span>
-  <button id="logout-btn" class="ghost-btn">Sign out</button>
-</header>
+<div class="layout">
 
-<main class="dash">
+  <!-- Mobile header -->
+  <div class="mobile-header">
+    <button id="hamburger" class="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="mobile-title">Castaway</span>
+    <span id="mobile-pill" class="pill off">Idle</span>
+  </div>
 
-  <!-- Live status -->
-  <section class="card wide">
-    <h2>Live</h2>
-    <div class="kv">
-      <div><span class="label">Status</span><span id="kv-publish" class="value">—</span></div>
-      <div><span class="label">Viewers</span><span id="kv-viewers" class="value">—</span></div>
-      <div><span class="label">Source bitrate</span><span id="kv-bw" class="value">—</span></div>
-      <div><span class="label">Total ingested</span><span id="kv-bytes" class="value">—</span></div>
-      <div><span class="label">Server uptime</span><span id="kv-uptime" class="value">—</span></div>
-    </div>
-  </section>
-
-  <!-- System -->
-  <section class="card">
-    <h2>System</h2>
-    <div class="kv">
-      <div><span class="label">CPU</span><span id="kv-cpu" class="value">—</span></div>
-      <div><span class="label">Memory</span><span id="kv-mem" class="value">—</span></div>
-      <div><span class="label">HLS disk</span><span id="kv-disk" class="value">—</span></div>
-    </div>
-  </section>
-
-  <!-- Connected viewers -->
-  <section class="card wide">
-    <h2>Connected viewers <span id="viewers-count" class="muted">—</span></h2>
-    <div id="viewers-list" class="viewers-list">
-      <div class="viewers-empty">No one watching right now.</div>
-    </div>
-  </section>
-
-  <!-- Stream -->
-  <section class="card wide">
-    <h2>Stream</h2>
-
-    <label class="field">
-      <span class="field-label">Stream title <small>(shown to viewers)</small></span>
-      <div class="row">
-        <input type="text" id="cfg-title" placeholder="My Stream">
-        <button class="primary-btn" data-save="stream_title">Save</button>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo">
+        <img src="/static/icon.svg" alt="">
+        <span>Castaway</span>
       </div>
-    </label>
 
-    <label class="field">
-      <span class="field-label">Stream key <small>(OBS publish password — keep private)</small></span>
-      <div class="row">
-        <input type="text" id="cfg-key" readonly>
-        <button id="copy-key-btn" class="ghost-btn" title="Copy">Copy</button>
-        <button id="regen-key-btn" class="danger-btn">Regenerate</button>
-      </div>
-      <div class="hint">OBS Server: <code id="rtmp-url">—</code><br>OBS Stream Key: the value above.</div>
-    </label>
-
-  </section>
-
-  <!-- Viewer access -->
-  <section class="card">
-    <h2>Viewer access</h2>
-    <label class="field">
-      <span class="field-label">Viewer password</span>
-      <div class="row">
-        <input type="password" id="cfg-viewer-pw" placeholder="(leave empty to allow open access)">
-        <button class="primary-btn" data-save="viewer_password">Save</button>
-      </div>
-      <div id="viewer-pw-status" class="hint"></div>
-    </label>
-
-    <div class="field">
-      <span class="field-label">Watch URL <small>(auto-detected from this page's hostname)</small></span>
-      <div class="row">
-        <code id="watch-url" class="readonly-code">—</code>
-        <button id="copy-watch-btn" class="ghost-btn">Copy</button>
-      </div>
-      <div class="hint">Reflects whatever URL you used to reach the admin. Cloudflare Tunnel hostname or LAN IP, whichever applies.</div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-section="overview" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          Overview
+          <span id="nav-viewer-badge" class="nav-badge hidden"></span>
+        </a>
+        <a class="nav-item" data-section="stream" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+          Stream
+        </a>
+        <a class="nav-item" data-section="access" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+          Access
+        </a>
+        <a class="nav-item" data-section="logs" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          Session Log
+        </a>
+      </nav>
     </div>
-  </section>
 
-</main>
+    <div class="sidebar-footer">
+      <span id="status-pill" class="pill off">Idle</span>
+      <a id="watch-link" class="watch-link" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        Watch stream
+      </a>
+      <button id="logout-btn" class="signout-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+        Sign out
+      </button>
+    </div>
+  </aside>
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Overview -->
+    <section class="section" id="section-overview">
+      <div class="section-header">
+        <h1>Overview</h1>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-block">
+          <div class="stat-value" id="kv-publish">—</div>
+          <div id="kv-stream-age" class="stat-sub"></div>
+          <div class="stat-label">Status</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-value" id="kv-viewers">—</div>
+          <div class="stat-label">Watching now</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-value" id="kv-bw">—</div>
+          <div id="sparkline-wrap" class="sparkline-wrap">
+            <svg id="sparkline" class="sparkline" viewBox="0 0 120 28" preserveAspectRatio="none"></svg>
+          </div>
+          <div class="stat-label">Bitrate in</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-value" id="kv-peak">—</div>
+          <div class="stat-label">Peak viewers</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">System</div>
+        <div class="sys-row">
+          <div class="sys-item">
+            <span class="sys-label">CPU</span>
+            <span id="kv-cpu" class="sys-val">—</span>
+          </div>
+          <div class="sys-item">
+            <span class="sys-label">Memory</span>
+            <span id="kv-mem" class="sys-val">—</span>
+          </div>
+          <div class="sys-item">
+            <span class="sys-label">HLS disk</span>
+            <span id="kv-disk" class="sys-val">—</span>
+          </div>
+          <div class="sys-item">
+            <span class="sys-label">Total ingested</span>
+            <span id="kv-bytes" class="sys-val">—</span>
+          </div>
+          <div class="sys-item">
+            <span class="sys-label">Upload bandwidth</span>
+            <span id="kv-bw-out" class="sys-val">—</span>
+          </div>
+          <div class="sys-item">
+            <span class="sys-label">Server uptime</span>
+            <span id="kv-uptime" class="sys-val">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">Connected viewers <span id="viewers-count" class="count-badge"></span></div>
+        <div id="viewers-list" class="viewers-list">
+          <div class="viewers-empty">No one watching right now.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stream -->
+    <section class="section hidden" id="section-stream">
+      <div class="section-header"><h1>Stream</h1></div>
+      <div class="card">
+        <div class="card-title">Configuration</div>
+        <label class="field">
+          <span class="field-label">Stream title <small>(shown to viewers)</small></span>
+          <div class="row">
+            <input type="text" id="cfg-title" placeholder="My Stream">
+            <button class="primary-btn" data-save="stream_title">Save</button>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Stream key <small>(OBS publish password — keep private)</small></span>
+          <div class="row">
+            <input type="text" id="cfg-key" readonly>
+            <button id="copy-key-btn" class="ghost-btn">Copy</button>
+            <button id="regen-key-btn" class="danger-btn">Regenerate</button>
+          </div>
+          <div class="hint">OBS Server: <code id="rtmp-url">—</code><br>OBS Stream Key: the value above.</div>
+        </label>
+      </div>
+    </section>
+
+    <!-- Access -->
+    <section class="section hidden" id="section-access">
+      <div class="section-header"><h1>Viewer Access</h1></div>
+      <div class="card">
+        <div class="card-title">Authentication</div>
+        <label class="field">
+          <span class="field-label">Viewer password</span>
+          <div class="row">
+            <input type="password" id="cfg-viewer-pw" placeholder="(leave empty to allow open access)">
+            <button class="primary-btn" data-save="viewer_password">Save</button>
+          </div>
+          <div id="viewer-pw-status" class="hint"></div>
+        </label>
+        <div class="field">
+          <span class="field-label">Watch URL <small>(auto-detected from this page's hostname)</small></span>
+          <div class="row">
+            <code id="watch-url" class="readonly-code">—</code>
+            <button id="copy-watch-btn" class="ghost-btn">Copy</button>
+          </div>
+          <div class="hint">Reflects whatever URL you used to reach the admin — Cloudflare Tunnel or LAN IP.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Session Log -->
+    <section class="section hidden" id="section-logs">
+      <div class="section-header"><h1>Session Log</h1></div>
+      <div class="card">
+        <div class="card-title">Recent viewer sessions</div>
+        <div id="sessions-list" class="sessions-list">
+          <div class="viewers-empty">Loading…</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
 
 <div id="toast" class="toast"></div>
-
 <script src="/static/admin.js"></script>
 </body>
 </html>

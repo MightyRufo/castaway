@@ -53,8 +53,8 @@ EOF
 cat > "$CONF_DIR/show-hls.conf" <<'EOF'
 hls on;
 hls_path /var/lib/nginx/hls;
-hls_fragment 4s;
-hls_playlist_length 60s;
+hls_fragment 1s;
+hls_playlist_length 6s;
 hls_cleanup on;
 hls_nested off;
 EOF

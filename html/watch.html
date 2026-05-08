@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Castaway</title>
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <link rel="stylesheet" href="/style.css">
@@ -19,9 +20,15 @@
   </div>
 
   <div id="offline" class="offline">
-    <img src="/icon.svg" alt="">
-    <h2>Stream offline</h2>
-    <p id="offline-msg">Waiting for the stream to start…</p>
+    <div class="offline-rings">
+      <div class="ring r1"></div>
+      <div class="ring r2"></div>
+      <div class="ring r3"></div>
+      <div class="offline-dot"></div>
+    </div>
+    <h2 id="offline-title" class="offline-title">Stream offline</h2>
+    <p id="offline-msg" class="offline-wait">Waiting for the stream to start…</p>
+    <div class="going-live-badge">Going Live</div>
   </div>
 
   <div class="controls">
@@ -50,6 +57,8 @@
     <div class="stat-row"><span class="label">Bandwidth est.</span> <span id="s-bw"      class="value">—</span></div>
     <div class="stat-row"><span class="label">Buffer</span>         <span id="s-buf"     class="value">—</span></div>
     <div class="stat-row"><span class="label">Latency</span>        <span id="s-lat"     class="value">—</span></div>
+    <div class="stat-row"><span class="label">Ping</span>           <span id="s-ping"    class="value">—</span></div>
+    <div class="stat-row"><span class="label">Total delay est.</span><span id="s-total-delay" class="value">—</span></div>
     <div class="stat-row"><span class="label">Dropped frames</span> <span id="s-drop"    class="value">—</span></div>
     <div class="stat-row"><span class="label">Stalls</span>         <span id="s-stall"   class="value">0</span></div>
 
