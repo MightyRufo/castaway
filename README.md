@@ -1,5 +1,7 @@
 # Castaway
 
+> ⚠️ **Beta** — APIs, env vars, and template paths may shift between releases. Pin to a specific tag if you depend on stability.
+
 Self-hosted single-stream RTMP relay for Unraid (or any Docker host). OBS pushes to a private key, viewers watch a fullscreen HTML5 player with a real-time **viewer-side** connection diagnostics drawer (bitrate, buffer, latency, dropped frames, stalls). One container = one stream.
 
 ## Why
@@ -11,11 +13,14 @@ When viewers say "the stream is laggy" you can immediately see whether it's thei
 - **Single-stream model** — one container, one stream. The OBS publish key is private and never appears in URLs or UI.
 - **Admin dashboard** on port 7401 — change the stream key, title, and viewer password at runtime. Live stats (publishing state, viewer count, bitrate, uptime, CPU/RAM/disk).
 - **Passthrough only** — zero transcoding. nginx-rtmp byte-for-byte relays whatever OBS publishes. Stream at whatever resolution and bitrate you like.
+- **Low-latency HLS** — 1-second fragments, 6-second live window. Viewers see the stream within ~3–4 seconds of OBS pressing publish.
 - **HLS in tmpfs** — segments live in RAM (64 MB cap via `--tmpfs`). No SSD wear.
-- **Fullscreen, edge-to-edge player** — minimal overlay, auto-hides on idle, click-to-pause, double-click for fullscreen.
+- **Fullscreen, edge-to-edge player** — minimal overlay, auto-hides on idle, click-to-pause, double-click for fullscreen, smooth 0.5s fade between live and offline states.
 - **In-page password gate** — `VIEWER_PASSWORD`. Custom branded login form (no native browser popup), HttpOnly per-boot token cookie. The password is never written to the cookie.
-- **Viewer-side stats drawer** — resolution, video bitrate, bandwidth estimate, buffer, latency, dropped frames, stalls. Toggle with `I`.
+- **Viewer-side stats drawer** — resolution, video bitrate, bandwidth estimate, buffer, latency, dropped frames, stalls. Tap the stats button on the player chrome to open it.
+- **Dead-publisher detection** — when OBS disconnects, the HLS playlist and segments are wiped immediately so the next stream starts from a clean state instead of replaying the tail of the previous broadcast.
 - **Auto-reconnect** with backoff when the stream drops.
+- **Hardened container** — runs as a non-root user inside the container, with right-click + devtools deterrents on the player to make casual stream-ripping harder.
 - **Mobile responsive**, **picture-in-picture**.
 - **Proxy/tunnel safe** — relative redirects so it works behind Cloudflare Tunnel, NPM, Traefik, port remaps.
 
