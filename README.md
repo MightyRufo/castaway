@@ -10,7 +10,7 @@ Self-hosted single-stream RTMP relay for Unraid (or any Docker host). OBS pushes
 - **Admin dashboard** on port 7401 — change the stream key, title, and viewer password at runtime. Live stats (publishing state, viewer count, bitrate, uptime, CPU/RAM/disk).
 - **Passthrough only** — zero transcoding. nginx-rtmp byte-for-byte relays whatever OBS publishes. Stream at whatever resolution and bitrate you like.
 - **Low-latency HLS** — 1-second fragments, 6-second live window. Viewers see the stream within ~3–4 seconds of OBS pressing publish.
-- **HLS in tmpfs** — segments live in RAM (64 MB cap via `--tmpfs`). No SSD wear.
+- **HLS in tmpfs** — segments live in RAM. No SSD wear. Default cap 64 MB is plenty for 1080p; bump to 512 MB or 1 GB for 4K via `--tmpfs ...:size=1g`.
 - **Fullscreen, edge-to-edge player** — minimal overlay, auto-hides on idle, click-to-pause, double-click for fullscreen, smooth 0.5s fade between live and offline states.
 - **In-page password gate** — `VIEWER_PASSWORD`. Custom branded login form (no native browser popup), HttpOnly per-boot token cookie. The password is never written to the cookie.
 - **Viewer-side stats drawer** — resolution, video bitrate, bandwidth estimate, buffer, latency, dropped frames, stalls. Tap the stats button on the player chrome to open it.
